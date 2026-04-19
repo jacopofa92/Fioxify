@@ -1,3 +1,6 @@
+/* --------------------------------------------------
+   RESET & BASE
+-------------------------------------------------- */
 * {
   box-sizing: border-box;
   margin: 0;
@@ -10,8 +13,9 @@ body {
   color: #f5f5f5;
 }
 
-/* AUTH */
-
+/* --------------------------------------------------
+   AUTH (LOGIN)
+-------------------------------------------------- */
 .auth-body {
   min-height: 100vh;
   display: flex;
@@ -36,36 +40,7 @@ body {
   font-weight: 700;
 }
 
-.auth-tabs {
-  display: flex;
-  margin-bottom: 16px;
-  border-radius: 999px;
-  background: #181a22;
-  padding: 4px;
-}
-
-.auth-tab {
-  flex: 1;
-  border: none;
-  background: transparent;
-  color: #888;
-  padding: 8px 0;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 0.9rem;
-}
-
-.auth-tab.active {
-  background: #262a35;
-  color: #fff;
-}
-
 .auth-form {
-  display: none;
-  margin-top: 12px;
-}
-
-.auth-form.active {
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -85,24 +60,22 @@ body {
   border-color: #3b82f6;
 }
 
-.auth-form button {
-  margin-top: 6px;
-}
-
 .auth-error {
   color: #f97373;
   font-size: 0.8rem;
   min-height: 16px;
 }
 
-/* BUTTONS */
-
+/* --------------------------------------------------
+   BUTTONS
+-------------------------------------------------- */
 button {
   cursor: pointer;
 }
 
 .btn-primary,
-.auth-form button {
+.auth-form button,
+#upload-btn {
   background: #3b82f6;
   border: none;
   border-radius: 8px;
@@ -114,26 +87,27 @@ button {
 }
 
 .btn-primary:hover,
-.auth-form button:hover {
+.auth-form button:hover,
+#upload-btn:hover {
   background: #2563eb;
   transform: translateY(-1px);
 }
 
-.btn-secondary {
+.logout-btn {
   background: #181a22;
   border: 1px solid #262a35;
-  border-radius: 8px;
   padding: 8px 12px;
+  border-radius: 8px;
   color: #e5e5e5;
-  font-size: 0.85rem;
 }
 
-.btn-secondary:hover {
+.logout-btn:hover {
   background: #262a35;
 }
 
-/* APP */
-
+/* --------------------------------------------------
+   APP LAYOUT
+-------------------------------------------------- */
 .app-body {
   min-height: 100vh;
   display: flex;
@@ -151,43 +125,30 @@ button {
   backdrop-filter: blur(10px);
 }
 
-.app-title h1 {
-  font-size: 1.3rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.subtitle {
-  font-size: 0.8rem;
-  color: #9ca3af;
-}
-
 .user-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
   font-size: 0.85rem;
   color: #d1d5db;
 }
 
-.app-main {
+.app-layout {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1.4fr);
+  grid-template-columns: 280px 1fr 340px;
   gap: 24px;
-  padding: 20px 24px 80px;
+  padding: 24px;
 }
 
-.upload-section,
-.library-section {
+/* --------------------------------------------------
+   UPLOAD SECTION
+-------------------------------------------------- */
+.upload-section {
   background: rgba(10, 12, 16, 0.9);
   border-radius: 16px;
-  padding: 16px 18px;
+  padding: 20px;
   border: 1px solid #1f2933;
 }
 
-.upload-section h2,
-.library-section h2 {
+.upload-section h2 {
   font-size: 1rem;
   margin-bottom: 12px;
 }
@@ -198,26 +159,83 @@ button {
   color: #e5e5e5;
 }
 
-.upload-status {
+#upload-status {
+  margin-top: 8px;
   font-size: 0.8rem;
   color: #9ca3af;
-  margin-top: 6px;
+}
+
+/* --------------------------------------------------
+   PLAYER SECTION
+-------------------------------------------------- */
+.player-section {
+  background: rgba(10, 12, 16, 0.9);
+  border-radius: 16px;
+  padding: 24px;
+  border: 1px solid #1f2933;
+  text-align: center;
+}
+
+.current-track {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+#current-cover {
+  width: 220px;
+  height: 220px;
+  object-fit: cover;
+  border-radius: 16px;
+  margin-bottom: 12px;
+  border: 1px solid #2a2d35;
+  box-shadow: 0 0 18px rgba(0,0,0,0.4);
+}
+
+#current-track-name {
+  font-size: 1rem;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+
+#audio-player {
+  width: 100%;
+  margin-top: 10px;
+}
+
+/* --------------------------------------------------
+   LIBRARY SECTION
+-------------------------------------------------- */
+.library-section {
+  background: rgba(10, 12, 16, 0.9);
+  border-radius: 16px;
+  padding: 20px;
+  border: 1px solid #1f2933;
+}
+
+.library-section h2 {
+  font-size: 1rem;
+  margin-bottom: 12px;
 }
 
 .tracks-list {
   list-style: none;
   margin-top: 8px;
-  max-height: 380px;
+  max-height: 480px;
   overflow-y: auto;
+  padding-right: 6px;
 }
 
 .track-item {
-  padding: 8px 10px;
-  border-radius: 8px;
-  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px;
+  border-radius: 10px;
+  margin-bottom: 6px;
   background: #111318;
   border: 1px solid transparent;
-  font-size: 0.9rem;
   cursor: pointer;
   transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
 }
@@ -228,42 +246,29 @@ button {
   transform: translateY(-1px);
 }
 
+.track-cover-small {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid #2a2d35;
+}
+
 .empty-message {
   font-size: 0.85rem;
   color: #6b7280;
   margin-top: 8px;
 }
 
-/* PLAYER */
-
-.player-footer {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  background: #050608;
-  border-top: 1px solid #1f2933;
-  padding: 8px 16px;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.player-info {
-  flex: 1;
-  font-size: 0.85rem;
-  color: #d1d5db;
-}
-
-#audio-player {
-  max-width: 320px;
-}
-
-/* RESPONSIVE */
-
-@media (max-width: 800px) {
-  .app-main {
+/* --------------------------------------------------
+   RESPONSIVE
+-------------------------------------------------- */
+@media (max-width: 900px) {
+  .app-layout {
     grid-template-columns: 1fr;
-    padding-bottom: 100px;
+  }
+
+  .player-section {
+    order: -1;
   }
 }

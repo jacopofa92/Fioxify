@@ -5,40 +5,51 @@
   <title>Fioxify – Libreria</title>
   <link rel="stylesheet" href="css/style.css" />
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script>
   <script defer src="app.js"></script>
 </head>
 <body class="app-body">
+
+  <!-- HEADER -->
   <header class="app-header">
-    <div class="app-title">
-      <h1>Fioxify</h1>
-      <span class="subtitle">Libreria condivisa</span>
-    </div>
     <div class="user-info">
       <span id="user-email"></span>
-      <button id="logout-btn" class="btn-secondary">Logout</button>
     </div>
+    <button id="logout-btn" class="logout-btn">Logout</button>
   </header>
 
-  <main class="app-main">
+  <main class="app-layout">
+
+    <!-- SEZIONE UPLOAD -->
     <section class="upload-section">
       <h2>Carica un brano</h2>
       <input type="file" id="file-input" accept="audio/*" />
-      <button id="upload-btn" class="btn-primary">Carica</button>
-      <p class="upload-status" id="upload-status"></p>
+      <button id="upload-btn">Carica</button>
+      <p id="upload-status"></p>
     </section>
 
+    <!-- SEZIONE PLAYER -->
+    <section class="player-section">
+      <div class="current-track">
+        <img id="current-cover" class="track-cover" src="img/default-cover.png" alt="Cover" />
+        <h3 id="current-track-name">Nessun brano in riproduzione</h3>
+      </div>
+
+      <audio id="audio-player" controls></audio>
+    </section>
+
+    <!-- SEZIONE LIBRERIA -->
     <section class="library-section">
       <h2>Libreria</h2>
-      <ul id="tracks-list" class="tracks-list"></ul>
-      <p id="empty-message" class="empty-message">Nessun brano caricato.</p>
+      <p id="empty-message"></p>
+
+      <ul id="tracks-list" class="tracks-list">
+        <!-- I brani verranno inseriti qui -->
+      </ul>
     </section>
+
   </main>
 
-  <footer class="player-footer">
-    <div class="player-info">
-      <span id="current-track-name">Nessun brano in riproduzione</span>
-    </div>
-    <audio id="audio-player" controls></audio>
-  </footer>
 </body>
+
 </html>

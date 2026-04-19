@@ -1,15 +1,20 @@
 // CONFIG SUPABASE
 const SUPABASE_URL = "https://ostajdhuaxrjrwroayja.supabase.co";
-const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zdGFqZGh1YXhyanJ3cm9heWphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1OTcyOTQsImV4cCI6MjA5MjE3MzI5NH0.YVzjs5VDHfGC8taGvlGxJiXb8Bh-NnZY1TjNeSTuGsY";
+const SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zdGFqZGh1YXhyanJ3cm9heWphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1OTcyOTQsImV4cCI6MjA5MjE3MzI5NH0.YVzjs5VDHfGC8taGvlGxJiXb8Bh-NnZY1TjNeSTuGsY";
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-const BUCKET_NAME = "Fioxisongs"; // assicurati che esista in Supabase
+const BUCKET_NAME = "Fioxisongs";
 
-// Rileva pagina
-const isAuthPage = window.location.pathname.endsWith("index.html") || window.location.pathname === "/" ;
+// Detect page
+const isAuthPage =
+  window.location.pathname.endsWith("index.html") ||
+  window.location.pathname === "/";
 const isAppPage = window.location.pathname.endsWith("app.html");
 
-// ---------------- AUTH PAGE (index.html) ----------------
+/* ============================================================
+   AUTH PAGE
+============================================================ */
 if (isAuthPage) {
   const tabLogin = document.getElementById("tab-login");
   const tabRegister = document.getElementById("tab-register");
@@ -51,11 +56,10 @@ if (isAuthPage) {
       return;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-
     if (error) {
       loginError.textContent = error.message || "Errore di login.";
       return;
@@ -64,7 +68,7 @@ if (isAuthPage) {
     window.location.href = "app.html";
   });
 
-  // Registrazione
+  // Register
   registerBtn?.addEventListener("click", async () => {
     registerError.textContent = "";
     const email = registerEmail.value.trim();
@@ -74,29 +78,25 @@ if (isAuthPage) {
       return;
     }
 
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
+    const { error } = await supabase.auth.signUp({ email, password });
     if (error) {
       registerError.textContent = error.message || "Errore di registrazione.";
       return;
     }
 
-    registerError.textContent = "Account creato. Controlla l'email (se richiesto) e poi fai login.";
+    registerError.textContent = "Account creato. Ora fai login.";
   });
 
-  // Se già loggato → vai direttamente alla libreria
+  // Auto-login if session exists
   (async () => {
     const { data } = await supabase.auth.getSession();
-    if (data.session) {
-      window.location.href = "app.html";
-    }
+    if (data.session) window.location.href = "app.html";
   })();
 }
 
-// ---------------- APP PAGE (app.html) ----------------
+/* ============================================================
+   APP PAGE
+============================================================ */
 if (isAppPage) {
   const userEmailSpan = document.getElementById("user-email");
   const logoutBtn = document.getElementById("logout-btn");
@@ -107,10 +107,11 @@ if (isAppPage) {
   const emptyMessage = document.getElementById("empty-message");
   const audioPlayer = document.getElementById("audio-player");
   const currentTrackName = document.getElementById("current-track-name");
+  const currentCover = document.getElementById("current-cover");
 
   let currentUser = null;
 
-  // Controlla sessione
+  // Check session
   (async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
@@ -128,7 +129,9 @@ if (isAppPage) {
     window.location.href = "index.html";
   });
 
-  // Upload
+  /* ============================================================
+     UPLOAD (audio + JSON metadata)
+  ============================================================ */
   uploadBtn?.addEventListener("click", async () => {
     uploadStatus.textContent = "";
     const file = fileInput.files[0];
@@ -137,103 +140,149 @@ if (isAppPage) {
       return;
     }
 
-    if (!currentUser) {
-      uploadStatus.textContent = "Sessione non valida. Rieffettua il login.";
-      return;
-    }
+    uploadStatus.textContent = "Lettura metadata...";
 
+    // Estrai metadata PRIMA dell'upload
+    let extractedTitle = file.name.replace(/\.[^/.]+$/, "");
+    let extractedCover = null;
+
+    await new Promise((resolve) => {
+      jsmediatags.read(file, {
+        onSuccess: (tag) => {
+          if (tag.tags.title) extractedTitle = tag.tags.title;
+
+          if (tag.tags.picture) {
+            const { data, format } = tag.tags.picture;
+            let base64 = "";
+            data.forEach((b) => (base64 += String.fromCharCode(b)));
+            extractedCover = `data:${format};base64,${btoa(base64)}`;
+          }
+          resolve();
+        },
+        onError: () => resolve(),
+      });
+    });
+
+    if (!extractedCover) extractedCover = "img/default-cover.png";
+
+    uploadStatus.textContent = "Caricamento...";
+
+    // Nome file generato (come vuoi tu)
     const ext = file.name.split(".").pop();
     const fileName = `${Date.now()}_${currentUser.id}.${ext}`;
-    const filePath = `${currentUser.id}/${fileName}`;
+    const audioPath = `${currentUser.id}/${fileName}`;
 
-    uploadStatus.textContent = "Caricamento in corso...";
-
-    const { error } = await supabase.storage
+    // 1) Upload audio
+    const { error: audioErr } = await supabase.storage
       .from(BUCKET_NAME)
-      .upload(filePath, file);
+      .upload(audioPath, file);
 
-    if (error) {
-      uploadStatus.textContent = "Errore nel caricamento.";
-      console.error(error);
+    if (audioErr) {
+      uploadStatus.textContent = "Errore upload audio.";
+      console.error(audioErr);
       return;
     }
 
-    uploadStatus.textContent = "Caricato con successo.";
+    // 2) Upload JSON metadata
+    const metadata = {
+      title: extractedTitle,
+      cover: extractedCover,
+      originalName: file.name
+    };
+
+    const jsonBlob = new Blob([JSON.stringify(metadata)], {
+      type: "application/json",
+    });
+
+    const jsonPath = audioPath.replace(/\.[^/.]+$/, ".json");
+
+    const { error: jsonErr } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(jsonPath, jsonBlob);
+
+    if (jsonErr) {
+      uploadStatus.textContent = "Errore upload metadata.";
+      console.error(jsonErr);
+      return;
+    }
+
+    uploadStatus.textContent = "Caricato!";
     fileInput.value = "";
     await loadTracks();
   });
 
-  // Carica lista brani
+  /* ============================================================
+     LOAD TRACKS (legge JSON metadata)
+  ============================================================ */
   async function loadTracks() {
-  tracksList.innerHTML = "";
-  emptyMessage.style.display = "none";
+    tracksList.innerHTML = "";
+    emptyMessage.style.display = "none";
 
-  // 1) Lista le cartelle (ogni cartella = user_id)
-  const { data: folders, error } = await supabase.storage
-    .from(BUCKET_NAME)
-    .list("", { limit: 100 });
+    const { data: folders } = await supabase.storage
+      .from(BUCKET_NAME)
+      .list("", { limit: 100 });
 
-  if (error) {
-    console.error(error);
-    emptyMessage.textContent = "Errore nel caricamento della libreria.";
-    emptyMessage.style.display = "block";
-    return;
-  }
+    if (!folders?.length) {
+      emptyMessage.textContent = "Nessun brano caricato.";
+      emptyMessage.style.display = "block";
+      return;
+    }
 
-  const allFiles = [];
+    const allTracks = [];
 
-  // 2) Per ogni cartella, lista i file dentro
-  for (const folder of folders) {
-    if (folder.name) {
-      const { data: files, error: err2 } = await supabase.storage
+    for (const folder of folders) {
+      const { data: files } = await supabase.storage
         .from(BUCKET_NAME)
         .list(folder.name, { limit: 100 });
 
-      if (!err2 && files?.length) {
-        files.forEach((f) => {
-          allFiles.push({
-            folder: folder.name,
-            name: f.name,
-            path: `${folder.name}/${f.name}`,
+      files?.forEach((f) => {
+        if (/\.(mp3|wav|m4a|flac)$/i.test(f.name)) {
+          allTracks.push({
+            audioPath: `${folder.name}/${f.name}`,
+            jsonPath: `${folder.name}/${f.name}`.replace(/\.[^/.]+$/, ".json"),
             created_at: f.created_at,
           });
-        });
-      }
+        }
+      });
+    }
+
+    allTracks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    for (const track of allTracks) {
+      const { data: jsonSigned } = await supabase.storage
+        .from(BUCKET_NAME)
+        .createSignedUrl(track.jsonPath, 60 * 60);
+
+      if (!jsonSigned?.signedUrl) continue;
+
+      const metadata = await fetch(jsonSigned.signedUrl).then((r) => r.json());
+
+      const li = document.createElement("li");
+      li.className = "track-item";
+
+      const img = document.createElement("img");
+      img.className = "track-cover-small";
+      img.src = metadata.cover;
+
+      const title = document.createElement("span");
+      title.textContent = metadata.title;
+
+      li.appendChild(img);
+      li.appendChild(title);
+
+      li.addEventListener("click", async () => {
+        const { data: audioSigned } = await supabase.storage
+          .from(BUCKET_NAME)
+          .createSignedUrl(track.audioPath, 60 * 60);
+
+        audioPlayer.src = audioSigned.signedUrl;
+        audioPlayer.play();
+
+        currentTrackName.textContent = metadata.title;
+        currentCover.src = metadata.cover;
+      });
+
+      tracksList.appendChild(li);
     }
   }
-
-  // 3) Se non ci sono file
-  if (!allFiles.length) {
-    emptyMessage.textContent = "Nessun brano caricato.";
-    emptyMessage.style.display = "block";
-    return;
-  }
-
-  // 4) Ordina per data
-  allFiles.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-
-  // 5) Mostra i file
-  allFiles.forEach((file) => {
-    const li = document.createElement("li");
-    li.className = "track-item";
-    li.textContent = file.name.replace(/^\d+_/, "");
-
-    li.addEventListener("click", async () => {
-      const { data: signed, error: errUrl } = await supabase.storage
-        .from(BUCKET_NAME)
-        .createSignedUrl(file.path, 60 * 60);
-
-      if (errUrl) {
-        console.error(errUrl);
-        return;
-      }
-
-      audioPlayer.src = signed.signedUrl;
-      audioPlayer.play();
-      currentTrackName.textContent = file.name.replace(/^\d+_/, "");
-    });
-
-    tracksList.appendChild(li);
-  });
-}
 }
