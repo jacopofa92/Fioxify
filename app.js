@@ -1,4 +1,6 @@
-// CONFIG SUPABASE
+/* ============================================================
+   CONFIG SUPABASE
+============================================================ */
 const SUPABASE_URL = "https://ostajdhuaxrjrwroayja.supabase.co";
 const SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9zdGFqZGh1YXhyanJ3cm9heWphIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY1OTcyOTQsImV4cCI6MjA5MjE3MzI5NH0.YVzjs5VDHfGC8taGvlGxJiXb8Bh-NnZY1TjNeSTuGsY";
@@ -6,14 +8,16 @@ const SUPABASE_ANON_KEY =
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
 
-// Detect page
+/* ============================================================
+   PAGE DETECTION
+============================================================ */
 const isAuthPage =
   window.location.pathname.endsWith("index.html") ||
   window.location.pathname === "/";
 const isAppPage = window.location.pathname.endsWith("app.html");
 
 /* ============================================================
-   AUTH PAGE
+   AUTH PAGE (se usi index.html)
 ============================================================ */
 if (isAuthPage) {
   const tabLogin = document.getElementById("tab-login");
@@ -31,7 +35,6 @@ if (isAuthPage) {
   const registerBtn = document.getElementById("register-btn");
   const registerError = document.getElementById("register-error");
 
-  // Switch tab
   tabLogin?.addEventListener("click", () => {
     tabLogin.classList.add("active");
     tabRegister.classList.remove("active");
@@ -46,7 +49,6 @@ if (isAuthPage) {
     loginForm.classList.remove("active");
   });
 
-  // Login
   loginBtn?.addEventListener("click", async () => {
     loginError.textContent = "";
     const email = loginEmail.value.trim();
@@ -68,7 +70,6 @@ if (isAuthPage) {
     window.location.href = "app.html";
   });
 
-  // Register
   registerBtn?.addEventListener("click", async () => {
     registerError.textContent = "";
     const email = registerEmail.value.trim();
@@ -87,7 +88,6 @@ if (isAuthPage) {
     registerError.textContent = "Account creato. Ora fai login.";
   });
 
-  // Auto-login if session exists
   (async () => {
     const { data } = await supabase.auth.getSession();
     if (data.session) window.location.href = "app.html";
@@ -109,9 +109,47 @@ if (isAppPage) {
   const currentTrackName = document.getElementById("current-track-name");
   const currentCover = document.getElementById("current-cover");
 
+  /* TAG SYSTEM UPLOAD */
+  let currentTags = [];
+  const tagsContainer = document.getElementById("tags-container");
+  const tagInput = document.getElementById("tag-input");
+
+  function renderUploadTags() {
+    tagsContainer.innerHTML = "";
+    currentTags.forEach((tag, index) => {
+      const tagEl = document.createElement("div");
+      tagEl.className = "tag";
+      tagEl.innerHTML = `
+        ${tag}
+        <span class="tag-remove" data-index="${index}">×</span>
+      `;
+      tagsContainer.appendChild(tagEl);
+    });
+  }
+
+  tagInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && tagInput.value.trim() !== "") {
+      e.preventDefault();
+      const newTag = tagInput.value.trim();
+      if (!currentTags.includes(newTag)) {
+        currentTags.push(newTag);
+        renderUploadTags();
+      }
+      tagInput.value = "";
+    }
+  });
+
+  tagsContainer.addEventListener("click", (e) => {
+    if (e.target.classList.contains("tag-remove")) {
+      const index = e.target.dataset.index;
+      currentTags.splice(index, 1);
+      renderUploadTags();
+    }
+  });
+
+  /* SESSION CHECK */
   let currentUser = null;
 
-  // Check session
   (async () => {
     const { data } = await supabase.auth.getSession();
     if (!data.session) {
@@ -123,14 +161,14 @@ if (isAppPage) {
     await loadTracks();
   })();
 
-  // Logout
+  /* LOGOUT */
   logoutBtn?.addEventListener("click", async () => {
     await supabase.auth.signOut();
     window.location.href = "index.html";
   });
 
   /* ============================================================
-     UPLOAD (audio + JSON metadata)
+     UPLOAD AUDIO + METADATA + TAGS
   ============================================================ */
   uploadBtn?.addEventListener("click", async () => {
     uploadStatus.textContent = "";
@@ -142,7 +180,6 @@ if (isAppPage) {
 
     uploadStatus.textContent = "Lettura metadata...";
 
-    // Estrai metadata PRIMA dell'upload
     let extractedTitle = file.name.replace(/\.[^/.]+$/, "");
     let extractedCover = null;
 
@@ -167,12 +204,10 @@ if (isAppPage) {
 
     uploadStatus.textContent = "Caricamento...";
 
-    // Nome file generato (come vuoi tu)
     const ext = file.name.split(".").pop();
     const fileName = `${Date.now()}_${currentUser.id}.${ext}`;
     const audioPath = `${currentUser.id}/${fileName}`;
 
-    // 1) Upload audio
     const { error: audioErr } = await supabase.storage
       .from(BUCKET_NAME)
       .upload(audioPath, file);
@@ -183,11 +218,11 @@ if (isAppPage) {
       return;
     }
 
-    // 2) Upload JSON metadata
     const metadata = {
       title: extractedTitle,
       cover: extractedCover,
-      originalName: file.name
+      originalName: file.name,
+      tags: currentTags,
     };
 
     const jsonBlob = new Blob([JSON.stringify(metadata)], {
@@ -198,7 +233,7 @@ if (isAppPage) {
 
     const { error: jsonErr } = await supabase.storage
       .from(BUCKET_NAME)
-      .upload(jsonPath, jsonBlob);
+      .upload(jsonPath, jsonBlob, { upsert: true });
 
     if (jsonErr) {
       uploadStatus.textContent = "Errore upload metadata.";
@@ -208,11 +243,60 @@ if (isAppPage) {
 
     uploadStatus.textContent = "Caricato!";
     fileInput.value = "";
+    currentTags = [];
+    renderUploadTags();
+
     await loadTracks();
   });
 
   /* ============================================================
-     LOAD TRACKS (legge JSON metadata)
+     TAG EDITOR INLINE (PER UNA CANZONE)
+  ============================================================ */
+  function setupTagEditor(editorEl, initialTags) {
+    let tags = [...(initialTags || [])];
+
+    const container = editorEl.querySelector(".edit-tags-container");
+    const input = editorEl.querySelector(".edit-tag-input");
+
+    function render() {
+      container.innerHTML = "";
+      tags.forEach((tag, index) => {
+        const el = document.createElement("div");
+        el.className = "tag";
+        el.innerHTML = `${tag} <span class="tag-remove" data-index="${index}">×</span>`;
+        container.appendChild(el);
+      });
+    }
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && input.value.trim() !== "") {
+        e.preventDefault();
+        const newTag = input.value.trim();
+        if (!tags.includes(newTag)) {
+          tags.push(newTag);
+          render();
+        }
+        input.value = "";
+      }
+    });
+
+    container.addEventListener("click", (e) => {
+      if (e.target.classList.contains("tag-remove")) {
+        const index = e.target.dataset.index;
+        tags.splice(index, 1);
+        render();
+      }
+    });
+
+    render();
+
+    return {
+      getTags: () => tags,
+    };
+  }
+
+  /* ============================================================
+     LOAD TRACKS
   ============================================================ */
   async function loadTracks() {
     tracksList.innerHTML = "";
@@ -251,7 +335,7 @@ if (isAppPage) {
     for (const track of allTracks) {
       const { data: jsonSigned } = await supabase.storage
         .from(BUCKET_NAME)
-        .createSignedUrl(track.jsonPath, 60 * 60);
+        .createSignedUrl(track.jsonPath, 3600);
 
       if (!jsonSigned?.signedUrl) continue;
 
@@ -260,20 +344,56 @@ if (isAppPage) {
       const li = document.createElement("li");
       li.className = "track-item";
 
+      const row = document.createElement("div");
+      row.className = "track-main-row";
+
       const img = document.createElement("img");
       img.className = "track-cover-small";
       img.src = metadata.cover;
 
       const title = document.createElement("span");
+      title.className = "track-title";
       title.textContent = metadata.title;
 
-      li.appendChild(img);
-      li.appendChild(title);
+      const tagsRow = document.createElement("div");
+      tagsRow.className = "track-tags-row";
 
+      const tagsBox = document.createElement("div");
+      tagsBox.className = "track-tags";
+      tagsBox.innerHTML = (metadata.tags || [])
+        .map((t) => `<span class="tag">${t}</span>`)
+        .join(" ");
+
+      const editBtn = document.createElement("button");
+      editBtn.className = "edit-tags-btn";
+      editBtn.textContent = "Modifica tag";
+
+      tagsRow.appendChild(tagsBox);
+      tagsRow.appendChild(editBtn);
+
+      row.appendChild(img);
+      row.appendChild(title);
+      row.appendChild(tagsRow);
+
+      li.appendChild(row);
+
+      // EDITOR INLINE
+      const editor = document.createElement("div");
+      editor.className = "tag-editor";
+      editor.innerHTML = `
+        <div class="tags-box">
+          <div class="edit-tags-container"></div>
+          <input type="text" class="edit-tag-input" placeholder="Aggiungi tag e premi Invio">
+        </div>
+        <button class="tag-editor-save">Salva</button>
+      `;
+      li.appendChild(editor);
+
+      // CLICK PLAY (solo sul li, non su edit)
       li.addEventListener("click", async () => {
         const { data: audioSigned } = await supabase.storage
           .from(BUCKET_NAME)
-          .createSignedUrl(track.audioPath, 60 * 60);
+          .createSignedUrl(track.audioPath, 3600);
 
         audioPlayer.src = audioSigned.signedUrl;
         audioPlayer.play();
@@ -282,7 +402,57 @@ if (isAppPage) {
         currentCover.src = metadata.cover;
       });
 
+      // APRI/CHIUDI EDITOR
+      let editorController = null;
+
+      editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const isOpen = editor.style.display === "block";
+        editor.style.display = isOpen ? "none" : "block";
+
+        if (!isOpen) {
+          editorController = setupTagEditor(editor, metadata.tags || []);
+        }
+      });
+
+      // SALVA TAG MODIFICATI
+      editor.querySelector(".tag-editor-save").addEventListener("click", async (e) => {
+        e.stopPropagation();
+        if (!editorController) return;
+
+        const newTags = editorController.getTags();
+        metadata.tags = newTags;
+
+        const newJsonBlob = new Blob([JSON.stringify(metadata)], {
+          type: "application/json",
+        });
+
+        const { error: updErr } = await supabase.storage
+          .from(BUCKET_NAME)
+          .upload(track.jsonPath, newJsonBlob, { upsert: true });
+
+        if (updErr) {
+          console.error("Errore aggiornamento tag:", updErr);
+          return;
+        }
+
+        tagsBox.innerHTML = newTags.map((t) => `<span class="tag">${t}</span>`).join(" ");
+        editor.style.display = "none";
+      });
+
       tracksList.appendChild(li);
     }
   }
+
+  /* ============================================================
+     COLLAPSABLE SECTIONS
+  ============================================================ */
+  document.querySelectorAll(".collapsible-title").forEach((title) => {
+    title.addEventListener("click", () => {
+      const targetId = title.dataset.target;
+      const section = document.getElementById(targetId);
+      if (!section) return;
+      section.classList.toggle("collapsed");
+    });
+  });
 }

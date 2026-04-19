@@ -3,11 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <title>Fioxify – Libreria</title>
+
   <link rel="stylesheet" href="css/style.css" />
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script>
+
   <script defer src="app.js"></script>
 </head>
+
 <body class="app-body">
 
   <!-- HEADER -->
@@ -20,36 +24,63 @@
 
   <main class="app-layout">
 
-    <!-- SEZIONE UPLOAD -->
-    <section class="upload-section">
-      <h2>Carica un brano</h2>
-      <input type="file" id="file-input" accept="audio/*" />
-      <button id="upload-btn">Carica</button>
-      <p id="upload-status"></p>
-    </section>
+    <!-- UPLOAD WRAPPER (COLLAPSABLE, CHIUSO DI DEFAULT) -->
+    <div class="collapsible-wrapper">
+      <h2 class="collapsible-title" data-target="upload-content">
+        Carica un brano
+      </h2>
 
-    <!-- SEZIONE PLAYER -->
+      <section class="upload-section collapsible-content collapsed" id="upload-content">
+        <div class="upload-inner">
+          <input type="file" id="file-input" accept="audio/*" />
+
+          <!-- TAG SYSTEM UPLOAD -->
+          <div class="tags-box">
+            <div id="tags-container" class="tags-container"></div>
+            <input
+              type="text"
+              id="tag-input"
+              class="tag-input"
+              placeholder="Aggiungi tag e premi Invio"
+            />
+          </div>
+
+          <button id="upload-btn">Carica</button>
+          <p id="upload-status"></p>
+        </div>
+      </section>
+    </div>
+
+    <!-- PLAYER -->
     <section class="player-section">
       <div class="current-track">
-        <img id="current-cover" class="track-cover" src="img/default-cover.png" alt="Cover" />
+        <img
+          id="current-cover"
+          class="track-cover"
+          src="img/default-cover.png"
+          alt="Cover"
+        />
         <h3 id="current-track-name">Nessun brano in riproduzione</h3>
       </div>
 
       <audio id="audio-player" controls></audio>
     </section>
 
-    <!-- SEZIONE LIBRERIA -->
-    <section class="library-section">
-      <h2>Libreria</h2>
-      <p id="empty-message"></p>
+    <!-- LIBRERIA WRAPPER (COLLAPSABLE, APERTA) -->
+    <div class="collapsible-wrapper">
+      <h2 class="collapsible-title" data-target="library-content">
+        Libreria
+      </h2>
 
-      <ul id="tracks-list" class="tracks-list">
-        <!-- I brani verranno inseriti qui -->
-      </ul>
-    </section>
+      <section class="library-section collapsible-content" id="library-content">
+        <div class="library-inner">
+          <p id="empty-message"></p>
+          <ul id="tracks-list" class="tracks-list"></ul>
+        </div>
+      </section>
+    </div>
 
   </main>
 
 </body>
-
 </html>
