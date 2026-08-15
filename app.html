@@ -114,7 +114,7 @@
           <div id="playlists-panel" class="playlists-panel">
             <div class="new-playlist-row">
               <input type="text" id="new-playlist-name" placeholder="Nome nuova playlist" />
-              <button id="new-playlist-btn">Crea</button>
+              <button id="new-playlist-btn" class="btn-primary">Crea</button>
             </div>
             <ul id="playlists-list" class="playlists-list"></ul>
           </div>
@@ -132,6 +132,25 @@
   </main>
 
   <div id="toast-container" class="toast-container"></div>
+
+  <!-- MODALE CONFERMA ELIMINAZIONE (richiede di scrivere "elimina") -->
+  <div id="confirm-modal" class="modal-overlay" hidden>
+    <div class="modal-box">
+      <h3 id="confirm-modal-title">Conferma eliminazione</h3>
+      <p id="confirm-modal-message"></p>
+      <input
+        type="text"
+        id="confirm-modal-input"
+        class="confirm-modal-input"
+        placeholder='Scrivi "elimina" per confermare'
+        autocomplete="off"
+      />
+      <div class="modal-actions">
+        <button id="confirm-modal-cancel" class="modal-btn-secondary">Annulla</button>
+        <button id="confirm-modal-confirm" class="modal-btn-danger" disabled>Elimina definitivamente</button>
+      </div>
+    </div>
+  </div>
 
 </body>
 </html>

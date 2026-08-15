@@ -38,6 +38,61 @@ function showToast(message, type = "error") {
 }
 
 /* ============================================================
+   MODALE CONFERMA ELIMINAZIONE (richiede di scrivere "elimina")
+============================================================ */
+function confirmDelete({ title, message, onConfirm }) {
+  const overlay = document.getElementById("confirm-modal");
+  if (!overlay) return;
+
+  const titleEl = document.getElementById("confirm-modal-title");
+  const messageEl = document.getElementById("confirm-modal-message");
+  const input = document.getElementById("confirm-modal-input");
+  const cancelBtn = document.getElementById("confirm-modal-cancel");
+  const confirmBtn = document.getElementById("confirm-modal-confirm");
+
+  titleEl.textContent = title;
+  messageEl.textContent = message;
+  input.value = "";
+  confirmBtn.disabled = true;
+  overlay.hidden = false;
+  input.focus();
+
+  function onInput() {
+    confirmBtn.disabled = input.value.trim().toLowerCase() !== "elimina";
+  }
+
+  function onConfirmClick() {
+    if (confirmBtn.disabled) return;
+    close();
+    onConfirm();
+  }
+
+  function onOverlayClick(e) {
+    if (e.target === overlay) close();
+  }
+
+  function onKeydown(e) {
+    if (e.key === "Escape") close();
+    if (e.key === "Enter" && !confirmBtn.disabled) onConfirmClick();
+  }
+
+  function close() {
+    overlay.hidden = true;
+    input.removeEventListener("input", onInput);
+    confirmBtn.removeEventListener("click", onConfirmClick);
+    cancelBtn.removeEventListener("click", close);
+    overlay.removeEventListener("click", onOverlayClick);
+    document.removeEventListener("keydown", onKeydown);
+  }
+
+  input.addEventListener("input", onInput);
+  confirmBtn.addEventListener("click", onConfirmClick);
+  cancelBtn.addEventListener("click", close);
+  overlay.addEventListener("click", onOverlayClick);
+  document.addEventListener("keydown", onKeydown);
+}
+
+/* ============================================================
    PWA: registrazione service worker (app installabile)
 ============================================================ */
 if ("serviceWorker" in navigator) {
@@ -696,9 +751,13 @@ if (isAppPage) {
       deleteBtn.className = "icon-btn";
       deleteBtn.textContent = "🗑";
       deleteBtn.title = "Elimina brano";
-      deleteBtn.addEventListener("click", async (e) => {
+      deleteBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (confirm(`Eliminare "${track.title}"?`)) await deleteTrack(track);
+        confirmDelete({
+          title: "Eliminare il brano?",
+          message: `"${track.title}" verrà rimosso definitivamente dallo storage e dalla libreria: non si può annullare.`,
+          onConfirm: () => deleteTrack(track),
+        });
       });
       actions.appendChild(deleteBtn);
     }
@@ -1028,21 +1087,35 @@ if (isAppPage) {
      RIORDINO PLAYLIST (drag & drop)
   ============================================================ */
   function attachDragReorder(ul, playlistId) {
+    let dropBefore = true;
+
+    function clearDropIndicators() {
+      ul.querySelectorAll(".track-item.drop-before, .track-item.drop-after").forEach((el) =>
+        el.classList.remove("drop-before", "drop-after")
+      );
+    }
+
     ul.addEventListener("dragover", (e) => {
       e.preventDefault();
       const targetLi = e.target.closest(".track-item");
-      ul.querySelectorAll(".track-item.drop-target").forEach((el) => el.classList.remove("drop-target"));
-      if (targetLi && !targetLi.classList.contains("dragging")) targetLi.classList.add("drop-target");
+      clearDropIndicators();
+      if (!targetLi || targetLi.classList.contains("dragging")) return;
+
+      // metà superiore = inserisci prima, metà inferiore = inserisci dopo:
+      // così il punto di rilascio non è ambiguo, in nessuna direzione
+      const rect = targetLi.getBoundingClientRect();
+      dropBefore = e.clientY - rect.top < rect.height / 2;
+      targetLi.classList.add(dropBefore ? "drop-before" : "drop-after");
     });
 
     ul.addEventListener("dragleave", (e) => {
       const targetLi = e.target.closest(".track-item");
-      if (targetLi) targetLi.classList.remove("drop-target");
+      if (targetLi) targetLi.classList.remove("drop-before", "drop-after");
     });
 
     ul.addEventListener("drop", async (e) => {
       e.preventDefault();
-      ul.querySelectorAll(".track-item.drop-target").forEach((el) => el.classList.remove("drop-target"));
+      clearDropIndicators();
 
       const draggedId = e.dataTransfer.getData("text/plain");
       const targetLi = e.target.closest(".track-item");
@@ -1053,11 +1126,11 @@ if (isAppPage) {
 
       const ids = (playlistTracksMap[playlistId] || []).slice();
       const from = ids.indexOf(draggedId);
-      const to = ids.indexOf(targetId);
-      if (from === -1 || to === -1) return;
+      if (from === -1 || !ids.includes(targetId)) return;
 
       ids.splice(from, 1);
-      ids.splice(to, 0, draggedId);
+      const targetIndex = ids.indexOf(targetId); // ricalcolato dopo la rimozione
+      ids.splice(targetIndex + (dropBefore ? 0 : 1), 0, draggedId);
       playlistTracksMap[playlistId] = ids;
 
       render();
