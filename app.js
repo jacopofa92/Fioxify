@@ -144,6 +144,7 @@ if (isAppPage) {
   let nowPlayingId = null;
   let shuffleOn = false;
   let repeatMode = "none"; // "none" | "all" | "one"
+  let expandedPlaylistId = null;
 
   currentCover.src = DEFAULT_COVER;
 
@@ -430,6 +431,7 @@ if (isAppPage) {
   function buildTrackItem(track, queueList, opts = {}) {
     const li = document.createElement("li");
     li.className = "track-item" + (track.id === nowPlayingId ? " playing" : "");
+    li.dataset.trackId = track.id;
 
     const row = document.createElement("div");
     row.className = "track-main-row";
@@ -466,7 +468,7 @@ if (isAppPage) {
     actions.className = "track-actions";
 
     const likeBtn = document.createElement("button");
-    likeBtn.className = "icon-btn" + (track.is_favorite ? " liked" : "");
+    likeBtn.className = "icon-btn like-btn" + (track.is_favorite ? " liked" : "");
     likeBtn.textContent = track.is_favorite ? "♥" : "♡";
     likeBtn.title = "Preferito";
 
@@ -606,7 +608,18 @@ if (isAppPage) {
     }
     track.is_favorite = newVal;
     if (track.id === nowPlayingId) updateLikeCurrentBtn(track);
-    render();
+
+    if (currentView === "favorites") {
+      // il brano deve comparire/sparire da questa vista: serve un rebuild
+      render();
+    } else {
+      // altrove basta aggiornare il cuoricino, senza ricostruire la lista
+      // (evita di richiudere editor tag o playlist aperte in quel momento)
+      document.querySelectorAll(`.track-item[data-track-id="${track.id}"] .like-btn`).forEach((btn) => {
+        btn.classList.toggle("liked", newVal);
+        btn.textContent = newVal ? "♥" : "♡";
+      });
+    }
   }
 
   /* ============================================================
@@ -753,6 +766,7 @@ if (isAppPage) {
 
         playlists = playlists.filter((p) => p.id !== pl.id);
         delete playlistTracksMap[pl.id];
+        if (expandedPlaylistId === pl.id) expandedPlaylistId = null;
         render();
       });
 
@@ -766,33 +780,40 @@ if (isAppPage) {
       const detail = document.createElement("div");
       detail.className = "playlist-tracks";
 
+      // riapre automaticamente la playlist che l'utente aveva già espanso,
+      // così azioni come play/like/rimuovi non la richiudono di scatto
+      if (expandedPlaylistId === pl.id) {
+        populatePlaylistDetail(detail, pl, trackIds);
+        detail.classList.add("open");
+      }
+
       row.addEventListener("click", () => {
-        const isOpen = detail.classList.contains("open");
-        document.querySelectorAll(".playlist-tracks.open").forEach((d) => d.classList.remove("open"));
-
-        if (!isOpen) {
-          detail.innerHTML = "";
-          const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
-
-          if (!tracks.length) {
-            const empty = document.createElement("p");
-            empty.textContent = "Nessun brano in questa playlist.";
-            empty.style.cssText = "font-size:0.8rem;color:#9ca3af;";
-            detail.appendChild(empty);
-          } else {
-            const ul = document.createElement("ul");
-            ul.className = "tracks-list";
-            tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { playlistId: pl.id })));
-            detail.appendChild(ul);
-          }
-          detail.classList.add("open");
-        }
+        const isOpen = expandedPlaylistId === pl.id;
+        expandedPlaylistId = isOpen ? null : pl.id;
+        render();
       });
 
       li.appendChild(row);
       li.appendChild(detail);
       playlistsList.appendChild(li);
     });
+  }
+
+  function populatePlaylistDetail(detail, pl, trackIds) {
+    detail.innerHTML = "";
+    const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
+
+    if (!tracks.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "Nessun brano in questa playlist.";
+      empty.style.cssText = "font-size:0.8rem;color:#9ca3af;";
+      detail.appendChild(empty);
+    } else {
+      const ul = document.createElement("ul");
+      ul.className = "tracks-list";
+      tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { playlistId: pl.id })));
+      detail.appendChild(ul);
+    }
   }
 
   /* ============================================================
@@ -819,8 +840,16 @@ if (isAppPage) {
     currentTrackArtist.textContent = track.artist || "";
     currentCover.src = track.cover || DEFAULT_COVER;
     updateLikeCurrentBtn(track);
+    updatePlayingHighlight();
+  }
 
-    render();
+  function updatePlayingHighlight() {
+    document.querySelectorAll(".track-item.playing").forEach((el) => el.classList.remove("playing"));
+    if (nowPlayingId != null) {
+      document
+        .querySelectorAll(`.track-item[data-track-id="${nowPlayingId}"]`)
+        .forEach((el) => el.classList.add("playing"));
+    }
   }
 
   function updateLikeCurrentBtn(track) {
