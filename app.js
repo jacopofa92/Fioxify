@@ -7,6 +7,10 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
+const APP_VERSION = "1.0.0";
+
+const appVersionEl = document.getElementById("app-version");
+if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
 
 const DEFAULT_COVER =
   "data:image/svg+xml;utf8," +

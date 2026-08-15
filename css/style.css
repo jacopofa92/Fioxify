@@ -67,6 +67,21 @@ body {
   min-height: 16px;
 }
 
+.app-version {
+  text-align: center;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  color: #4b5563;
+}
+
+.auth-container .app-version {
+  margin-top: 20px;
+}
+
+.app-layout ~ .app-version {
+  padding: 4px 0 20px;
+}
+
 /* --------------------------------------------------
    BUTTONS
 -------------------------------------------------- */
