@@ -26,65 +26,17 @@
     <button id="logout-btn" class="logout-btn">Logout</button>
   </header>
 
-  <main class="app-layout">
+  <!-- NAVIGAZIONE PRIMARIA -->
+  <nav class="app-nav">
+    <button class="nav-tab active" data-page="library">📚 Libreria</button>
+    <button class="nav-tab" data-page="upload">⬆️ Carica</button>
+  </nav>
 
-    <!-- UPLOAD WRAPPER (COLLAPSABLE, CHIUSO DI DEFAULT) -->
-    <div class="collapsible-wrapper">
-      <h2 class="collapsible-title" data-target="upload-content">
-        Carica un brano
-      </h2>
+  <main class="app-main">
 
-      <section class="upload-section collapsible-content collapsed" id="upload-content">
-        <div class="upload-inner">
-          <input type="file" id="file-input" accept="audio/*" />
-
-          <!-- TAG SYSTEM UPLOAD -->
-          <div class="tags-box">
-            <div id="tags-container" class="tags-container"></div>
-            <input
-              type="text"
-              id="tag-input"
-              class="tag-input"
-              placeholder="Aggiungi tag e premi Invio"
-            />
-          </div>
-
-          <button id="upload-btn">Carica</button>
-          <p id="upload-status"></p>
-        </div>
-      </section>
-    </div>
-
-    <!-- PLAYER -->
-    <section class="player-section">
-      <div class="current-track">
-        <img
-          id="current-cover"
-          class="track-cover"
-          alt="Cover"
-        />
-        <h3 id="current-track-name">Nessun brano in riproduzione</h3>
-        <p id="current-track-artist" class="current-track-artist"></p>
-      </div>
-
-      <div class="player-controls-row">
-        <button id="shuffle-btn" class="control-btn" title="Shuffle">🔀</button>
-        <button id="prev-btn" class="control-btn" title="Precedente">⏮</button>
-        <button id="like-current-btn" class="control-btn" title="Preferito">🤍</button>
-        <button id="next-btn" class="control-btn" title="Successivo">⏭</button>
-        <button id="repeat-btn" class="control-btn" title="Ripeti">🔁</button>
-      </div>
-
-      <audio id="audio-player" controls></audio>
-    </section>
-
-    <!-- LIBRERIA WRAPPER (COLLAPSABLE, APERTA) -->
-    <div class="collapsible-wrapper">
-      <h2 class="collapsible-title" data-target="library-content">
-        Libreria
-      </h2>
-
-      <section class="library-section collapsible-content" id="library-content">
+    <!-- PAGINA LIBRERIA -->
+    <section id="page-library" class="app-page active">
+      <div class="library-section">
         <div class="library-inner">
 
           <div class="view-tabs">
@@ -126,12 +78,85 @@
           <p id="empty-message"></p>
           <ul id="tracks-list" class="tracks-list"></ul>
         </div>
-      </section>
-    </div>
+      </div>
+    </section>
+
+    <!-- PAGINA CARICA -->
+    <section id="page-upload" class="app-page">
+      <div class="upload-section">
+        <h2 class="page-title">Carica un brano</h2>
+        <div class="upload-inner">
+          <input type="file" id="file-input" accept="audio/*" />
+
+          <!-- TAG SYSTEM UPLOAD -->
+          <div class="tags-box">
+            <div id="tags-container" class="tags-container"></div>
+            <input
+              type="text"
+              id="tag-input"
+              class="tag-input"
+              placeholder="Aggiungi tag e premi Invio"
+            />
+          </div>
+
+          <button id="upload-btn" class="btn-primary">Carica</button>
+          <p id="upload-status"></p>
+        </div>
+      </div>
+    </section>
 
   </main>
 
   <p class="app-version" id="app-version"></p>
+
+  <!-- MINI PLAYER (persistente, tocca per aprire la vista estesa) -->
+  <div id="mini-player" class="mini-player" hidden>
+    <img id="mini-cover" class="mini-player-cover" alt="Cover" />
+    <div class="mini-player-info">
+      <span id="mini-track-name" class="mini-player-title"></span>
+      <span id="mini-track-artist" class="mini-player-artist"></span>
+    </div>
+    <button id="mini-play-pause-btn" class="mini-play-btn" title="Play">▶</button>
+  </div>
+
+  <!-- PLAYER ESTESO (a schermo intero, come il "Now Playing" di Spotify) -->
+  <div id="full-player" class="full-player-overlay" hidden>
+    <button id="collapse-player-btn" class="collapse-player-btn" title="Chiudi">⌄ In riproduzione</button>
+
+    <section class="player-section">
+      <div class="current-track">
+        <div id="cover-wrap" class="cover-wrap">
+          <img
+            id="current-cover"
+            class="track-cover"
+            alt="Cover"
+          />
+          <button id="like-current-btn" class="cover-like-btn" title="Preferito">🤍</button>
+          <div class="cover-equalizer" aria-hidden="true">
+            <span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <h3 id="current-track-name">Nessun brano in riproduzione</h3>
+        <p id="current-track-artist" class="current-track-artist"></p>
+      </div>
+
+      <div class="progress-row">
+        <span id="current-time" class="time-label">0:00</span>
+        <input type="range" id="seek-bar" class="seek-bar" min="0" max="0" value="0" step="0.1" />
+        <span id="duration-time" class="time-label">0:00</span>
+      </div>
+
+      <div class="player-controls-row">
+        <button id="shuffle-btn" class="control-btn" title="Shuffle">🔀</button>
+        <button id="prev-btn" class="control-btn" title="Precedente">⏮</button>
+        <button id="play-pause-btn" class="control-btn control-btn-primary" title="Play">▶</button>
+        <button id="next-btn" class="control-btn" title="Successivo">⏭</button>
+        <button id="repeat-btn" class="control-btn" title="Ripeti">🔁</button>
+      </div>
+    </section>
+  </div>
+
+  <audio id="audio-player" preload="metadata"></audio>
 
   <div id="toast-container" class="toast-container"></div>
 

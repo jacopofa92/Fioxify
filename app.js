@@ -221,6 +221,18 @@ if (isAppPage) {
   const nextBtn = document.getElementById("next-btn");
   const repeatBtn = document.getElementById("repeat-btn");
   const likeCurrentBtn = document.getElementById("like-current-btn");
+  const playPauseBtn = document.getElementById("play-pause-btn");
+  const seekBar = document.getElementById("seek-bar");
+  const currentTimeLabel = document.getElementById("current-time");
+  const durationLabel = document.getElementById("duration-time");
+
+  const miniPlayer = document.getElementById("mini-player");
+  const miniCover = document.getElementById("mini-cover");
+  const miniTrackName = document.getElementById("mini-track-name");
+  const miniTrackArtist = document.getElementById("mini-track-artist");
+  const miniPlayPauseBtn = document.getElementById("mini-play-pause-btn");
+  const fullPlayer = document.getElementById("full-player");
+  const collapsePlayerBtn = document.getElementById("collapse-player-btn");
 
   /* STATE */
   let currentUser = null;
@@ -249,13 +261,29 @@ if (isAppPage) {
   function renderUploadTags() {
     tagsContainer.innerHTML = "";
     currentTags.forEach((tag, index) => {
-      const tagEl = document.createElement("div");
-      tagEl.className = "tag";
-      tagEl.innerHTML = `
-        ${tag}
-        <span class="tag-remove" data-index="${index}">×</span>
-      `;
-      tagsContainer.appendChild(tagEl);
+      tagsContainer.appendChild(buildEditableTagChip(tag, index));
+    });
+  }
+
+  function buildEditableTagChip(tag, index) {
+    const el = document.createElement("div");
+    el.className = "tag";
+    el.appendChild(document.createTextNode(tag));
+    const removeSpan = document.createElement("span");
+    removeSpan.className = "tag-remove";
+    removeSpan.dataset.index = index;
+    removeSpan.textContent = "×";
+    el.appendChild(removeSpan);
+    return el;
+  }
+
+  function renderTagChips(container, tags) {
+    container.innerHTML = "";
+    tags.forEach((t) => {
+      const span = document.createElement("span");
+      span.className = "tag";
+      span.textContent = t;
+      container.appendChild(span);
     });
   }
 
@@ -405,10 +433,7 @@ if (isAppPage) {
     function render() {
       container.innerHTML = "";
       tags.forEach((tag, index) => {
-        const el = document.createElement("div");
-        el.className = "tag";
-        el.innerHTML = `${tag} <span class="tag-remove" data-index="${index}">×</span>`;
-        container.appendChild(el);
+        container.appendChild(buildEditableTagChip(tag, index));
       });
     }
 
@@ -682,11 +707,16 @@ if (isAppPage) {
     title.className = "track-title";
     title.textContent = track.title;
     info.appendChild(title);
-    if (track.artist) {
-      const subtitle = document.createElement("span");
-      subtitle.className = "track-subtitle";
-      subtitle.textContent = track.artist;
-      info.appendChild(subtitle);
+
+    const subtitle = document.createElement("span");
+    subtitle.className = "track-subtitle";
+    info.appendChild(subtitle);
+    updateTrackSubtitle();
+
+    function updateTrackSubtitle() {
+      const meta = [track.artist, track.album].filter(Boolean).join(" — ");
+      subtitle.textContent = meta || "Aggiungi artista e album";
+      subtitle.classList.toggle("track-subtitle-empty", !meta);
     }
 
     const tagsRow = document.createElement("div");
@@ -694,11 +724,11 @@ if (isAppPage) {
 
     const tagsBox = document.createElement("div");
     tagsBox.className = "track-tags";
-    tagsBox.innerHTML = (track.tags || []).map((t) => `<span class="tag">${t}</span>`).join(" ");
+    renderTagChips(tagsBox, track.tags || []);
 
     const editBtn = document.createElement("button");
     editBtn.className = "edit-tags-btn";
-    editBtn.textContent = "Modifica tag";
+    editBtn.textContent = "Modifica info";
 
     const actions = document.createElement("div");
     actions.className = "track-actions";
@@ -775,10 +805,14 @@ if (isAppPage) {
     row.appendChild(tagsRow);
     li.appendChild(row);
 
-    // EDITOR TAG INLINE
+    // EDITOR INFO INLINE (artista, album, tag)
     const editor = document.createElement("div");
     editor.className = "tag-editor";
     editor.innerHTML = `
+      <div class="info-editor-fields">
+        <input type="text" class="edit-artist-input" placeholder="Artista">
+        <input type="text" class="edit-album-input" placeholder="Album">
+      </div>
       <div class="tags-box">
         <div class="edit-tags-container"></div>
         <input type="text" class="edit-tag-input" placeholder="Aggiungi tag e premi Invio">
@@ -809,24 +843,38 @@ if (isAppPage) {
       e.stopPropagation();
       const isOpen = editor.style.display === "block";
       editor.style.display = isOpen ? "none" : "block";
-      if (!isOpen) editorController = setupTagEditor(editor, track.tags || []);
+      if (!isOpen) {
+        editor.querySelector(".edit-artist-input").value = track.artist || "";
+        editor.querySelector(".edit-album-input").value = track.album || "";
+        editorController = setupTagEditor(editor, track.tags || []);
+      }
     });
 
     editor.querySelector(".tag-editor-save").addEventListener("click", async (e) => {
       e.stopPropagation();
       if (!editorController) return;
 
+      const newArtist = editor.querySelector(".edit-artist-input").value.trim();
+      const newAlbum = editor.querySelector(".edit-album-input").value.trim();
       const newTags = editorController.getTags();
-      const { error } = await supabase.from("tracks").update({ tags: newTags }).eq("id", track.id);
+
+      const { error } = await supabase
+        .from("tracks")
+        .update({ artist: newArtist || null, album: newAlbum || null, tags: newTags })
+        .eq("id", track.id);
 
       if (error) {
-        console.error("Errore aggiornamento tag:", error);
-        showToast("Errore nel salvataggio dei tag.");
+        console.error("Errore aggiornamento brano:", error);
+        showToast("Errore nel salvataggio delle informazioni.");
         return;
       }
 
+      track.artist = newArtist || null;
+      track.album = newAlbum || null;
       track.tags = newTags;
-      tagsBox.innerHTML = newTags.map((t) => `<span class="tag">${t}</span>`).join(" ");
+
+      updateTrackSubtitle();
+      renderTagChips(tagsBox, newTags);
       editor.style.display = "none";
     });
 
@@ -895,6 +943,14 @@ if (isAppPage) {
       currentTrackName.textContent = "Nessun brano in riproduzione";
       currentTrackArtist.textContent = "";
       currentCover.src = DEFAULT_COVER;
+      seekBar.value = 0;
+      seekBar.max = 0;
+      seekBar.style.setProperty("--progress", "0%");
+      currentTimeLabel.textContent = "0:00";
+      durationLabel.textContent = "0:00";
+      miniPlayer.hidden = true;
+      fullPlayer.hidden = true;
+      document.body.classList.remove("has-mini-player");
     }
 
     showToast("Brano eliminato.", "success");
@@ -1162,12 +1218,26 @@ if (isAppPage) {
     audioPlayer.src = audioSigned.signedUrl;
     audioPlayer.play();
 
+    seekBar.value = 0;
+    seekBar.max = 0;
+    seekBar.style.setProperty("--progress", "0%");
+    currentTimeLabel.textContent = "0:00";
+    durationLabel.textContent = "0:00";
+
+    const metaLine = [track.artist, track.album].filter(Boolean).join(" — ");
+
     nowPlayingId = track.id;
     currentTrackName.textContent = track.title;
-    currentTrackArtist.textContent = track.artist || "";
+    currentTrackArtist.textContent = metaLine;
     currentCover.src = track.cover || DEFAULT_COVER;
     updateLikeCurrentBtn(track);
     updatePlayingHighlight();
+
+    miniTrackName.textContent = track.title;
+    miniTrackArtist.textContent = metaLine;
+    miniCover.src = track.cover || DEFAULT_COVER;
+    miniPlayer.hidden = false;
+    document.body.classList.add("has-mini-player");
 
     registerPlay(track);
   }
@@ -1254,6 +1324,71 @@ if (isAppPage) {
     if (track) await toggleFavorite(track);
   });
 
+  /* PLAY/PAUSA + effetti visivi "sta suonando" attorno alla cover: riflettono
+     lo stato reale dell'elemento audio, non solo i nostri pulsanti */
+  playPauseBtn?.addEventListener("click", () => {
+    if (!audioPlayer.src) return;
+    if (audioPlayer.paused) audioPlayer.play();
+    else audioPlayer.pause();
+  });
+
+  function setPlayPauseIcon(isPlaying) {
+    const icon = isPlaying ? "⏸" : "▶";
+    const label = isPlaying ? "Pausa" : "Play";
+    if (playPauseBtn) {
+      playPauseBtn.textContent = icon;
+      playPauseBtn.title = label;
+    }
+    if (miniPlayPauseBtn) {
+      miniPlayPauseBtn.textContent = icon;
+      miniPlayPauseBtn.title = label;
+    }
+  }
+
+  audioPlayer.addEventListener("play", () => {
+    document.body.classList.add("audio-playing");
+    setPlayPauseIcon(true);
+  });
+
+  audioPlayer.addEventListener("pause", () => {
+    document.body.classList.remove("audio-playing");
+    setPlayPauseIcon(false);
+  });
+
+  audioPlayer.addEventListener("ended", () => {
+    document.body.classList.remove("audio-playing");
+    setPlayPauseIcon(false);
+  });
+
+  /* BARRA DI AVANZAMENTO (sostituisce i controlli nativi del browser) */
+  function formatTime(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return "0:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60)
+      .toString()
+      .padStart(2, "0");
+    return `${m}:${s}`;
+  }
+
+  audioPlayer.addEventListener("loadedmetadata", () => {
+    seekBar.max = audioPlayer.duration || 0;
+    durationLabel.textContent = formatTime(audioPlayer.duration);
+  });
+
+  audioPlayer.addEventListener("timeupdate", () => {
+    seekBar.value = audioPlayer.currentTime;
+    currentTimeLabel.textContent = formatTime(audioPlayer.currentTime);
+    const pct = audioPlayer.duration ? (audioPlayer.currentTime / audioPlayer.duration) * 100 : 0;
+    seekBar.style.setProperty("--progress", `${pct}%`);
+  });
+
+  seekBar?.addEventListener("input", () => {
+    audioPlayer.currentTime = Number(seekBar.value);
+    currentTimeLabel.textContent = formatTime(audioPlayer.currentTime);
+    const pct = seekBar.max ? (seekBar.value / seekBar.max) * 100 : 0;
+    seekBar.style.setProperty("--progress", `${pct}%`);
+  });
+
   audioPlayer.addEventListener("ended", () => {
     if (repeatMode === "one") {
       audioPlayer.currentTime = 0;
@@ -1265,14 +1400,33 @@ if (isAppPage) {
   });
 
   /* ============================================================
-     COLLAPSABLE SECTIONS
+     NAVIGAZIONE PRIMARIA (Libreria / Carica)
   ============================================================ */
-  document.querySelectorAll(".collapsible-title").forEach((title) => {
-    title.addEventListener("click", () => {
-      const targetId = title.dataset.target;
-      const section = document.getElementById(targetId);
-      if (!section) return;
-      section.classList.toggle("collapsed");
+  document.querySelectorAll(".nav-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetPage = btn.dataset.page;
+      document.querySelectorAll(".nav-tab").forEach((b) => b.classList.toggle("active", b === btn));
+      document.querySelectorAll(".app-page").forEach((page) => {
+        page.classList.toggle("active", page.id === `page-${targetPage}`);
+      });
     });
+  });
+
+  /* ============================================================
+     MINI PLAYER <-> PLAYER ESTESO
+  ============================================================ */
+  miniPlayer?.addEventListener("click", (e) => {
+    if (e.target.closest("#mini-play-pause-btn")) return;
+    fullPlayer.hidden = false;
+  });
+
+  collapsePlayerBtn?.addEventListener("click", () => {
+    fullPlayer.hidden = true;
+  });
+
+  miniPlayPauseBtn?.addEventListener("click", () => {
+    if (!audioPlayer.src) return;
+    if (audioPlayer.paused) audioPlayer.play();
+    else audioPlayer.pause();
   });
 }
