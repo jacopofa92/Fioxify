@@ -57,10 +57,18 @@
         <img
           id="current-cover"
           class="track-cover"
-          src="img/default-cover.png"
           alt="Cover"
         />
         <h3 id="current-track-name">Nessun brano in riproduzione</h3>
+        <p id="current-track-artist" class="current-track-artist"></p>
+      </div>
+
+      <div class="player-controls-row">
+        <button id="shuffle-btn" class="control-btn" title="Shuffle">🔀</button>
+        <button id="prev-btn" class="control-btn" title="Precedente">⏮</button>
+        <button id="like-current-btn" class="control-btn" title="Preferito">🤍</button>
+        <button id="next-btn" class="control-btn" title="Successivo">⏭</button>
+        <button id="repeat-btn" class="control-btn" title="Ripeti">🔁</button>
       </div>
 
       <audio id="audio-player" controls></audio>
@@ -74,6 +82,28 @@
 
       <section class="library-section collapsible-content" id="library-content">
         <div class="library-inner">
+
+          <div class="view-tabs">
+            <button class="view-tab active" data-view="library">Libreria</button>
+            <button class="view-tab" data-view="favorites">Preferiti</button>
+            <button class="view-tab" data-view="playlists">Playlist</button>
+          </div>
+
+          <input
+            type="text"
+            id="search-input"
+            class="search-input"
+            placeholder="Cerca per titolo, artista o tag..."
+          />
+
+          <div id="playlists-panel" class="playlists-panel">
+            <div class="new-playlist-row">
+              <input type="text" id="new-playlist-name" placeholder="Nome nuova playlist" />
+              <button id="new-playlist-btn">Crea</button>
+            </div>
+            <ul id="playlists-list" class="playlists-list"></ul>
+          </div>
+
           <p id="empty-message"></p>
           <ul id="tracks-list" class="tracks-list"></ul>
         </div>
