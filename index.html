@@ -2,8 +2,12 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Fioxify – Login</title>
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#050608" />
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"></script>
   <script defer src="app.js"></script>
 </head>
@@ -18,5 +22,7 @@
       <p class="auth-error" id="login-error"></p>
     </div>
   </div>
+
+  <div id="toast-container" class="toast-container"></div>
 </body>
 </html>

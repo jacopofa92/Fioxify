@@ -18,6 +18,35 @@ const DEFAULT_COVER =
   );
 
 /* ============================================================
+   TOAST (feedback errori / conferme, valido su tutte le pagine)
+============================================================ */
+function showToast(message, type = "error") {
+  const container = document.getElementById("toast-container");
+  if (!container) return;
+
+  const toast = document.createElement("div");
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  container.appendChild(toast);
+
+  requestAnimationFrame(() => toast.classList.add("show"));
+
+  setTimeout(() => {
+    toast.classList.remove("show");
+    setTimeout(() => toast.remove(), 250);
+  }, 3500);
+}
+
+/* ============================================================
+   PWA: registrazione service worker (app installabile)
+============================================================ */
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch((err) => console.error("SW registration failed:", err));
+  });
+}
+
+/* ============================================================
    PAGE DETECTION
 ============================================================ */
 const isAuthPage =
@@ -120,10 +149,13 @@ if (isAppPage) {
   const currentCover = document.getElementById("current-cover");
 
   const searchInput = document.getElementById("search-input");
+  const sortSelect = document.getElementById("sort-select");
   const playlistsPanel = document.getElementById("playlists-panel");
   const newPlaylistName = document.getElementById("new-playlist-name");
   const newPlaylistBtn = document.getElementById("new-playlist-btn");
   const playlistsList = document.getElementById("playlists-list");
+  const groupsPanel = document.getElementById("groups-panel");
+  const groupsList = document.getElementById("groups-list");
 
   const shuffleBtn = document.getElementById("shuffle-btn");
   const prevBtn = document.getElementById("prev-btn");
@@ -136,8 +168,9 @@ if (isAppPage) {
   let allTracks = [];
   let playlists = [];
   let playlistTracksMap = {}; // playlistId -> [trackId, ...]
-  let currentView = "library"; // "library" | "favorites" | "playlists"
+  let currentView = "library"; // "library" | "favorites" | "history" | "artists" | "albums" | "playlists"
   let searchTerm = "";
+  let sortBy = "date"; // "date" | "title" | "artist" | "plays"
 
   let currentQueue = [];
   let currentIndex = -1;
@@ -145,6 +178,7 @@ if (isAppPage) {
   let shuffleOn = false;
   let repeatMode = "none"; // "none" | "all" | "one"
   let expandedPlaylistId = null;
+  let expandedGroupKey = null;
 
   currentCover.src = DEFAULT_COVER;
 
@@ -270,6 +304,7 @@ if (isAppPage) {
     if (audioErr) {
       uploadStatus.textContent = "Errore upload audio.";
       console.error(audioErr);
+      showToast("Errore durante il caricamento del file audio.");
       return;
     }
 
@@ -286,6 +321,7 @@ if (isAppPage) {
     if (dbErr) {
       uploadStatus.textContent = "Errore salvataggio metadata.";
       console.error(dbErr);
+      showToast("Errore nel salvataggio dei metadata del brano.");
       return;
     }
 
@@ -293,6 +329,7 @@ if (isAppPage) {
     fileInput.value = "";
     currentTags = [];
     renderUploadTags();
+    showToast("Brano caricato!", "success");
 
     await loadData();
   });
@@ -351,10 +388,13 @@ if (isAppPage) {
       await Promise.all([
         supabase.from("tracks").select("*").order("created_at", { ascending: false }),
         supabase.from("playlists").select("*").order("created_at", { ascending: false }),
-        supabase.from("playlist_tracks").select("*").order("created_at", { ascending: true }),
+        supabase.from("playlist_tracks").select("*").order("position", { ascending: true }),
       ]);
 
-    if (trackErr) console.error(trackErr);
+    if (trackErr) {
+      console.error(trackErr);
+      showToast("Errore nel caricamento della libreria.");
+    }
 
     allTracks = trackRows || [];
     playlists = playlistRows || [];
@@ -382,17 +422,47 @@ if (isAppPage) {
     render();
   });
 
+  sortSelect?.addEventListener("change", () => {
+    sortBy = sortSelect.value;
+    render();
+  });
+
+  function matchesSearch(t, term) {
+    if (!term) return true;
+    return (
+      (t.title || "").toLowerCase().includes(term) ||
+      (t.artist || "").toLowerCase().includes(term) ||
+      (t.album || "").toLowerCase().includes(term) ||
+      (t.tags || []).some((tag) => tag.toLowerCase().includes(term))
+    );
+  }
+
+  function sortTracks(list) {
+    const arr = list.slice();
+    if (sortBy === "title") {
+      arr.sort((a, b) => (a.title || "").localeCompare(b.title || "", "it"));
+    } else if (sortBy === "artist") {
+      arr.sort((a, b) => (a.artist || "").localeCompare(b.artist || "", "it"));
+    } else if (sortBy === "plays") {
+      arr.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
+    } else if (currentView === "history") {
+      arr.sort((a, b) => new Date(b.last_played_at) - new Date(a.last_played_at));
+    } else {
+      arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    }
+    return arr;
+  }
+
   function getVisibleTracks() {
-    const base = currentView === "favorites" ? allTracks.filter((t) => t.is_favorite) : allTracks;
+    let base;
+    if (currentView === "favorites") base = allTracks.filter((t) => t.is_favorite);
+    else if (currentView === "history") base = allTracks.filter((t) => t.last_played_at);
+    else base = allTracks;
+
     const term = searchTerm.trim().toLowerCase();
-    if (!term) return base;
-    return base.filter((t) => {
-      return (
-        (t.title || "").toLowerCase().includes(term) ||
-        (t.artist || "").toLowerCase().includes(term) ||
-        (t.tags || []).some((tag) => tag.toLowerCase().includes(term))
-      );
-    });
+    if (term) base = base.filter((t) => matchesSearch(t, term));
+
+    return sortTracks(base);
   }
 
   function render() {
@@ -401,11 +471,21 @@ if (isAppPage) {
     });
 
     const isPlaylistsView = currentView === "playlists";
+    const isGroupedView = currentView === "artists" || currentView === "albums";
+    const isListView = !isPlaylistsView && !isGroupedView;
+
     playlistsPanel.style.display = isPlaylistsView ? "block" : "none";
-    tracksList.style.display = isPlaylistsView ? "none" : "block";
+    groupsPanel.style.display = isGroupedView ? "block" : "none";
+    tracksList.style.display = isListView ? "block" : "none";
+    sortSelect.style.display = isListView ? "" : "none";
 
     if (isPlaylistsView) {
       renderPlaylists();
+      return;
+    }
+
+    if (isGroupedView) {
+      renderGroupedView(currentView === "artists" ? "artist" : "album");
       return;
     }
 
@@ -413,8 +493,11 @@ if (isAppPage) {
     tracksList.innerHTML = "";
 
     if (!list.length) {
-      emptyMessage.textContent =
-        currentView === "favorites" ? "Nessun brano preferito." : "Nessun brano trovato.";
+      const messages = {
+        favorites: "Nessun brano preferito.",
+        history: "Non hai ancora ascoltato nessun brano.",
+      };
+      emptyMessage.textContent = messages[currentView] || "Nessun brano trovato.";
       emptyMessage.style.display = "block";
       return;
     }
@@ -426,12 +509,106 @@ if (isAppPage) {
   }
 
   /* ============================================================
+     VISTA ARTISTI / ALBUM (raggruppamento)
+  ============================================================ */
+  function renderGroupedView(field) {
+    groupsList.innerHTML = "";
+
+    const term = searchTerm.trim().toLowerCase();
+    const groups = {};
+
+    allTracks
+      .filter((t) => matchesSearch(t, term))
+      .forEach((t) => {
+        const key = (t[field] && t[field].trim()) || "Sconosciuto";
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(t);
+      });
+
+    const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, "it"));
+
+    if (!names.length) {
+      emptyMessage.textContent = "Nessun brano trovato.";
+      emptyMessage.style.display = "block";
+      return;
+    }
+    emptyMessage.style.display = "none";
+
+    names.forEach((name) => {
+      const tracks = groups[name];
+      const groupKey = `${field}:${name}`;
+
+      const li = document.createElement("li");
+      li.className = "playlist-item";
+
+      const row = document.createElement("div");
+      row.className = "playlist-item-row";
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "playlist-name";
+      nameEl.textContent = name;
+
+      const count = document.createElement("span");
+      count.className = "playlist-count";
+      count.textContent = `${tracks.length} brani`;
+
+      const actions = document.createElement("div");
+      actions.className = "playlist-actions";
+
+      const playBtn = document.createElement("button");
+      playBtn.className = "icon-btn";
+      playBtn.textContent = "▶";
+      playBtn.title = `Riproduci tutti i brani di ${name}`;
+      playBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        play(tracks[0], tracks);
+      });
+
+      actions.appendChild(playBtn);
+      row.appendChild(nameEl);
+      row.appendChild(count);
+      row.appendChild(actions);
+
+      const detail = document.createElement("div");
+      detail.className = "playlist-tracks";
+
+      if (expandedGroupKey === groupKey) {
+        const ul = document.createElement("ul");
+        ul.className = "tracks-list";
+        tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks)));
+        detail.appendChild(ul);
+        detail.classList.add("open");
+      }
+
+      row.addEventListener("click", () => {
+        expandedGroupKey = expandedGroupKey === groupKey ? null : groupKey;
+        render();
+      });
+
+      li.appendChild(row);
+      li.appendChild(detail);
+      groupsList.appendChild(li);
+    });
+  }
+
+  /* ============================================================
      TRACK ITEM (libreria / preferiti / dentro una playlist)
   ============================================================ */
   function buildTrackItem(track, queueList, opts = {}) {
     const li = document.createElement("li");
     li.className = "track-item" + (track.id === nowPlayingId ? " playing" : "");
     li.dataset.trackId = track.id;
+
+    if (opts.playlistId) {
+      li.draggable = true;
+      li.addEventListener("dragstart", (e) => {
+        e.stopPropagation();
+        li.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", track.id);
+      });
+      li.addEventListener("dragend", () => li.classList.remove("dragging"));
+    }
 
     const row = document.createElement("div");
     row.className = "track-main-row";
@@ -581,6 +758,7 @@ if (isAppPage) {
 
       if (error) {
         console.error("Errore aggiornamento tag:", error);
+        showToast("Errore nel salvataggio dei tag.");
         return;
       }
 
@@ -604,6 +782,7 @@ if (isAppPage) {
     const { error } = await supabase.from("tracks").update({ is_favorite: newVal }).eq("id", track.id);
     if (error) {
       console.error(error);
+      showToast("Errore nell'aggiornare i preferiti.");
       return;
     }
     track.is_favorite = newVal;
@@ -627,11 +806,15 @@ if (isAppPage) {
   ============================================================ */
   async function deleteTrack(track) {
     const { error: storageErr } = await supabase.storage.from(BUCKET_NAME).remove([track.storage_path]);
-    if (storageErr) console.error(storageErr);
+    if (storageErr) {
+      console.error(storageErr);
+      showToast("Errore nell'eliminare il file audio dallo storage.");
+    }
 
     const { error: dbErr } = await supabase.from("tracks").delete().eq("id", track.id);
     if (dbErr) {
       console.error(dbErr);
+      showToast("Errore nell'eliminare il brano.");
       return;
     }
 
@@ -651,6 +834,7 @@ if (isAppPage) {
       currentCover.src = DEFAULT_COVER;
     }
 
+    showToast("Brano eliminato.", "success");
     render();
   }
 
@@ -669,27 +853,36 @@ if (isAppPage) {
 
     if (error) {
       console.error(error);
+      showToast("Errore nella creazione della playlist.");
       return;
     }
 
     playlists.unshift(data);
     playlistTracksMap[data.id] = [];
     newPlaylistName.value = "";
+    showToast(`Playlist "${data.name}" creata.`, "success");
     render();
   });
 
   async function addTrackToPlaylist(trackId, playlistId) {
+    const nextPosition = (playlistTracksMap[playlistId] || []).length;
+
     const { error } = await supabase
       .from("playlist_tracks")
-      .insert({ playlist_id: playlistId, track_id: trackId });
+      .insert({ playlist_id: playlistId, track_id: trackId, position: nextPosition });
 
     if (error && error.code !== "23505") {
       console.error(error);
+      showToast("Errore nell'aggiungere il brano alla playlist.");
       return;
     }
 
     if (!playlistTracksMap[playlistId]) playlistTracksMap[playlistId] = [];
-    if (!playlistTracksMap[playlistId].includes(trackId)) playlistTracksMap[playlistId].push(trackId);
+    if (!playlistTracksMap[playlistId].includes(trackId)) {
+      playlistTracksMap[playlistId].push(trackId);
+      const pl = playlists.find((p) => p.id === playlistId);
+      showToast(pl ? `Aggiunto a "${pl.name}".` : "Aggiunto alla playlist.", "success");
+    }
 
     if (currentView === "playlists") render();
   }
@@ -703,11 +896,23 @@ if (isAppPage) {
 
     if (error) {
       console.error(error);
+      showToast("Errore nel rimuovere il brano dalla playlist.");
       return;
     }
 
     playlistTracksMap[playlistId] = (playlistTracksMap[playlistId] || []).filter((id) => id !== trackId);
     render();
+  }
+
+  async function persistPlaylistOrder(playlistId, orderedTrackIds) {
+    const results = await Promise.all(
+      orderedTrackIds.map((trackId, index) =>
+        supabase.from("playlist_tracks").update({ position: index }).eq("playlist_id", playlistId).eq("track_id", trackId)
+      )
+    );
+    if (results.some((r) => r.error)) {
+      showToast("Errore nel salvare il nuovo ordine della playlist.");
+    }
   }
 
   function renderPlaylists() {
@@ -761,12 +966,14 @@ if (isAppPage) {
         const { error } = await supabase.from("playlists").delete().eq("id", pl.id);
         if (error) {
           console.error(error);
+          showToast("Errore nell'eliminare la playlist.");
           return;
         }
 
         playlists = playlists.filter((p) => p.id !== pl.id);
         delete playlistTracksMap[pl.id];
         if (expandedPlaylistId === pl.id) expandedPlaylistId = null;
+        showToast("Playlist eliminata.", "success");
         render();
       });
 
@@ -813,7 +1020,49 @@ if (isAppPage) {
       ul.className = "tracks-list";
       tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { playlistId: pl.id })));
       detail.appendChild(ul);
+      attachDragReorder(ul, pl.id);
     }
+  }
+
+  /* ============================================================
+     RIORDINO PLAYLIST (drag & drop)
+  ============================================================ */
+  function attachDragReorder(ul, playlistId) {
+    ul.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      const targetLi = e.target.closest(".track-item");
+      ul.querySelectorAll(".track-item.drop-target").forEach((el) => el.classList.remove("drop-target"));
+      if (targetLi && !targetLi.classList.contains("dragging")) targetLi.classList.add("drop-target");
+    });
+
+    ul.addEventListener("dragleave", (e) => {
+      const targetLi = e.target.closest(".track-item");
+      if (targetLi) targetLi.classList.remove("drop-target");
+    });
+
+    ul.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      ul.querySelectorAll(".track-item.drop-target").forEach((el) => el.classList.remove("drop-target"));
+
+      const draggedId = e.dataTransfer.getData("text/plain");
+      const targetLi = e.target.closest(".track-item");
+      if (!draggedId || !targetLi) return;
+
+      const targetId = targetLi.dataset.trackId;
+      if (targetId === draggedId) return;
+
+      const ids = (playlistTracksMap[playlistId] || []).slice();
+      const from = ids.indexOf(draggedId);
+      const to = ids.indexOf(targetId);
+      if (from === -1 || to === -1) return;
+
+      ids.splice(from, 1);
+      ids.splice(to, 0, draggedId);
+      playlistTracksMap[playlistId] = ids;
+
+      render();
+      await persistPlaylistOrder(playlistId, ids);
+    });
   }
 
   /* ============================================================
@@ -829,6 +1078,7 @@ if (isAppPage) {
 
     if (error || !audioSigned?.signedUrl) {
       console.error(error);
+      showToast("Errore nella riproduzione del brano.");
       return;
     }
 
@@ -841,6 +1091,21 @@ if (isAppPage) {
     currentCover.src = track.cover || DEFAULT_COVER;
     updateLikeCurrentBtn(track);
     updatePlayingHighlight();
+
+    registerPlay(track);
+  }
+
+  function registerPlay(track) {
+    track.play_count = (track.play_count || 0) + 1;
+    track.last_played_at = new Date().toISOString();
+
+    supabase
+      .from("tracks")
+      .update({ play_count: track.play_count, last_played_at: track.last_played_at })
+      .eq("id", track.id)
+      .then(({ error }) => {
+        if (error) console.error("Errore aggiornamento cronologia:", error);
+      });
   }
 
   function updatePlayingHighlight() {

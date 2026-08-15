@@ -2,9 +2,13 @@
 <html lang="it">
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Fioxify – Libreria</title>
 
   <link rel="stylesheet" href="css/style.css" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <meta name="theme-color" content="#050608" />
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script>
@@ -86,15 +90,26 @@
           <div class="view-tabs">
             <button class="view-tab active" data-view="library">Libreria</button>
             <button class="view-tab" data-view="favorites">Preferiti</button>
+            <button class="view-tab" data-view="history">Cronologia</button>
+            <button class="view-tab" data-view="artists">Artisti</button>
+            <button class="view-tab" data-view="albums">Album</button>
             <button class="view-tab" data-view="playlists">Playlist</button>
           </div>
 
-          <input
-            type="text"
-            id="search-input"
-            class="search-input"
-            placeholder="Cerca per titolo, artista o tag..."
-          />
+          <div class="filters-row">
+            <input
+              type="text"
+              id="search-input"
+              class="search-input"
+              placeholder="Cerca per titolo, artista o tag..."
+            />
+            <select id="sort-select" class="sort-select">
+              <option value="date">Aggiunta di recente</option>
+              <option value="title">Titolo (A-Z)</option>
+              <option value="artist">Artista (A-Z)</option>
+              <option value="plays">Più ascoltati</option>
+            </select>
+          </div>
 
           <div id="playlists-panel" class="playlists-panel">
             <div class="new-playlist-row">
@@ -104,6 +119,10 @@
             <ul id="playlists-list" class="playlists-list"></ul>
           </div>
 
+          <div id="groups-panel" class="playlists-panel">
+            <ul id="groups-list" class="playlists-list"></ul>
+          </div>
+
           <p id="empty-message"></p>
           <ul id="tracks-list" class="tracks-list"></ul>
         </div>
@@ -111,6 +130,8 @@
     </div>
 
   </main>
+
+  <div id="toast-container" class="toast-container"></div>
 
 </body>
 </html>

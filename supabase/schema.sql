@@ -40,6 +40,10 @@ drop policy if exists "tracks_delete_own" on public.tracks;
 create policy "tracks_delete_own" on public.tracks
   for delete using (auth.uid() = user_id);
 
+-- Cronologia / "più ascoltati"
+alter table public.tracks add column if not exists play_count integer not null default 0;
+alter table public.tracks add column if not exists last_played_at timestamptz;
+
 -- ------------------------------------------------------------
 -- PLAYLISTS
 -- ------------------------------------------------------------
@@ -66,6 +70,9 @@ create table if not exists public.playlist_tracks (
   created_at   timestamptz not null default now(),
   unique (playlist_id, track_id)
 );
+
+-- posizione manuale (riordino via drag & drop)
+alter table public.playlist_tracks add column if not exists position integer not null default 0;
 
 alter table public.playlist_tracks enable row level security;
 
