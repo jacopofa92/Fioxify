@@ -213,8 +213,13 @@ if (isAppPage) {
   const newPlaylistName = document.getElementById("new-playlist-name");
   const newPlaylistBtn = document.getElementById("new-playlist-btn");
   const playlistsList = document.getElementById("playlists-list");
+  const albumsPanel = document.getElementById("albums-panel");
+  const newAlbumName = document.getElementById("new-album-name");
+  const newAlbumBtn = document.getElementById("new-album-btn");
+  const albumsList = document.getElementById("albums-list");
   const groupsPanel = document.getElementById("groups-panel");
   const groupsList = document.getElementById("groups-list");
+  const uploadDropzone = document.getElementById("upload-dropzone");
 
   const shuffleBtn = document.getElementById("shuffle-btn");
   const prevBtn = document.getElementById("prev-btn");
@@ -237,8 +242,13 @@ if (isAppPage) {
   /* STATE */
   let currentUser = null;
   let allTracks = [];
+  let profilesById = {}; // userId -> { email }
   let playlists = [];
   let playlistTracksMap = {}; // playlistId -> [trackId, ...]
+  let albums = [];
+  let albumTracksMap = {}; // albumId -> [trackId, ...]
+  let favoriteTrackIds = new Set(); // preferiti PERSONALI dell'utente loggato
+  let userPlayStats = {}; // trackId -> { count, lastPlayedAt } PERSONALI dell'utente loggato
   let currentView = "library"; // "library" | "favorites" | "history" | "artists" | "albums" | "playlists"
   let searchTerm = "";
   let sortBy = "date"; // "date" | "title" | "artist" | "plays"
@@ -249,6 +259,7 @@ if (isAppPage) {
   let shuffleOn = false;
   let repeatMode = "none"; // "none" | "all" | "one"
   let expandedPlaylistId = null;
+  let expandedAlbumId = null;
   let expandedGroupKey = null;
 
   currentCover.src = DEFAULT_COVER;
@@ -343,23 +354,19 @@ if (isAppPage) {
 
   /* ============================================================
      UPLOAD AUDIO + METADATA + TAGS (in DB, non più in .json)
+     Supporta selezione/trascinamento di più file insieme.
   ============================================================ */
-  uploadBtn?.addEventListener("click", async () => {
-    uploadStatus.textContent = "";
-    const file = fileInput.files[0];
-    if (!file) {
-      uploadStatus.textContent = "Seleziona un file audio.";
-      return;
-    }
+  function normalizedTitle(str) {
+    return (str || "").trim().toLowerCase();
+  }
 
-    uploadStatus.textContent = "Lettura metadata...";
+  function readTags(file) {
+    return new Promise((resolve) => {
+      let extractedTitle = file.name.replace(/\.[^/.]+$/, "");
+      let extractedArtist = "";
+      let extractedAlbum = "";
+      let extractedCover = null;
 
-    let extractedTitle = file.name.replace(/\.[^/.]+$/, "");
-    let extractedArtist = "";
-    let extractedAlbum = "";
-    let extractedCover = null;
-
-    await new Promise((resolve) => {
       jsmediatags.read(file, {
         onSuccess: (tag) => {
           if (tag.tags.title) extractedTitle = tag.tags.title;
@@ -372,54 +379,117 @@ if (isAppPage) {
             data.forEach((b) => (base64 += String.fromCharCode(b)));
             extractedCover = `data:${format};base64,${btoa(base64)}`;
           }
-          resolve();
+          resolve({ title: extractedTitle, artist: extractedArtist, album: extractedAlbum, cover: extractedCover });
         },
-        onError: () => resolve(),
+        onError: () => resolve({ title: extractedTitle, artist: extractedArtist, album: extractedAlbum, cover: extractedCover }),
       });
     });
+  }
 
-    uploadStatus.textContent = "Caricamento...";
+  async function uploadSingleFile(file, existingTitles) {
+    const { title, artist, album, cover } = await readTags(file);
+
+    if (existingTitles.has(normalizedTitle(title))) {
+      showToast(`"${title}" non caricato: esiste già un brano con lo stesso nome.`);
+      return false;
+    }
 
     const ext = file.name.split(".").pop();
-    const fileName = `${slugify(extractedTitle)}-${Date.now()}.${ext}`;
+    const fileName = `${slugify(title)}-${Date.now()}.${ext}`;
     const audioPath = `${currentUser.id}/${fileName}`;
 
-    const { error: audioErr } = await supabase.storage
-      .from(BUCKET_NAME)
-      .upload(audioPath, file);
-
+    const { error: audioErr } = await supabase.storage.from(BUCKET_NAME).upload(audioPath, file);
     if (audioErr) {
-      uploadStatus.textContent = "Errore upload audio.";
       console.error(audioErr);
-      showToast("Errore durante il caricamento del file audio.");
-      return;
+      showToast(`Errore durante il caricamento di "${file.name}".`);
+      return false;
     }
 
     const { error: dbErr } = await supabase.from("tracks").insert({
       user_id: currentUser.id,
-      title: extractedTitle,
-      artist: extractedArtist || null,
-      album: extractedAlbum || null,
-      cover: extractedCover,
+      title,
+      artist: artist || null,
+      album: album || null,
+      cover,
       storage_path: audioPath,
       tags: currentTags,
     });
 
     if (dbErr) {
-      uploadStatus.textContent = "Errore salvataggio metadata.";
       console.error(dbErr);
-      showToast("Errore nel salvataggio dei metadata del brano.");
-      return;
+      showToast(`Errore nel salvataggio dei metadata di "${title}".`);
+      return false;
     }
 
-    uploadStatus.textContent = "Caricato!";
+    existingTitles.add(normalizedTitle(title));
+    return true;
+  }
+
+  async function uploadFiles(files) {
+    if (!files.length) return;
+
+    const existingTitles = new Set(allTracks.map((t) => normalizedTitle(t.title)));
+    let successCount = 0;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      uploadStatus.textContent =
+        files.length > 1 ? `Caricamento ${i + 1}/${files.length}: ${file.name}` : `Caricamento di "${file.name}"...`;
+      const ok = await uploadSingleFile(file, existingTitles);
+      if (ok) successCount++;
+    }
+
     fileInput.value = "";
     currentTags = [];
     renderUploadTags();
-    showToast("Brano caricato!", "success");
+
+    const failCount = files.length - successCount;
+    if (successCount > 0) {
+      uploadStatus.textContent =
+        failCount > 0 ? `${successCount} caricati, ${failCount} non caricati.` : `${successCount} brano/i caricato/i!`;
+      showToast(successCount === 1 ? "Brano caricato!" : `${successCount} brani caricati!`, "success");
+    } else {
+      uploadStatus.textContent = "Nessun brano caricato.";
+    }
 
     await loadData();
+  }
+
+  uploadBtn?.addEventListener("click", () => {
+    uploadStatus.textContent = "";
+    if (!fileInput.files.length) {
+      uploadStatus.textContent = "Seleziona uno o più file audio.";
+      return;
+    }
+    uploadFiles(Array.from(fileInput.files));
   });
+
+  /* Drag & drop, anche massivo, sull'area di upload */
+  if (uploadDropzone) {
+    ["dragenter", "dragover"].forEach((evt) =>
+      uploadDropzone.addEventListener(evt, (e) => {
+        e.preventDefault();
+        uploadDropzone.classList.add("drag-over");
+      })
+    );
+
+    uploadDropzone.addEventListener("dragleave", (e) => {
+      if (uploadDropzone.contains(e.relatedTarget)) return;
+      uploadDropzone.classList.remove("drag-over");
+    });
+
+    uploadDropzone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      uploadDropzone.classList.remove("drag-over");
+      const files = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("audio/"));
+      if (!files.length) {
+        showToast("Trascina solo file audio.");
+        return;
+      }
+      uploadStatus.textContent = "";
+      uploadFiles(files);
+    });
+  }
 
   /* ============================================================
      TAG EDITOR INLINE (PER UNA CANZONE)
@@ -468,12 +538,25 @@ if (isAppPage) {
      LOAD DATA (tracks + playlists dal DB)
   ============================================================ */
   async function loadData() {
-    const [{ data: trackRows, error: trackErr }, { data: playlistRows }, { data: ptRows }] =
-      await Promise.all([
-        supabase.from("tracks").select("*").order("created_at", { ascending: false }),
-        supabase.from("playlists").select("*").order("created_at", { ascending: false }),
-        supabase.from("playlist_tracks").select("*").order("position", { ascending: true }),
-      ]);
+    const [
+      { data: trackRows, error: trackErr },
+      { data: playlistRows },
+      { data: ptRows },
+      { data: albumRows },
+      { data: atRows },
+      { data: profileRows },
+      { data: favoriteRows },
+      { data: playRows },
+    ] = await Promise.all([
+      supabase.from("tracks").select("*").order("created_at", { ascending: false }),
+      supabase.from("playlists").select("*").order("created_at", { ascending: false }),
+      supabase.from("playlist_tracks").select("*").order("position", { ascending: true }),
+      supabase.from("albums").select("*").order("created_at", { ascending: false }),
+      supabase.from("album_tracks").select("*").order("position", { ascending: true }),
+      supabase.from("profiles").select("*"),
+      supabase.from("track_favorites").select("track_id").eq("user_id", currentUser.id),
+      supabase.from("track_plays").select("track_id, played_at").eq("user_id", currentUser.id),
+    ]);
 
     if (trackErr) {
       console.error(trackErr);
@@ -488,7 +571,51 @@ if (isAppPage) {
       playlistTracksMap[row.playlist_id].push(row.track_id);
     });
 
+    albums = albumRows || [];
+    albumTracksMap = {};
+    (atRows || []).forEach((row) => {
+      if (!albumTracksMap[row.album_id]) albumTracksMap[row.album_id] = [];
+      albumTracksMap[row.album_id].push(row.track_id);
+    });
+
+    profilesById = {};
+    (profileRows || []).forEach((p) => {
+      profilesById[p.id] = p;
+    });
+
+    favoriteTrackIds = new Set((favoriteRows || []).map((r) => r.track_id));
+
+    userPlayStats = {};
+    (playRows || []).forEach((row) => {
+      const stat = userPlayStats[row.track_id] || { count: 0, lastPlayedAt: null };
+      stat.count += 1;
+      if (!stat.lastPlayedAt || row.played_at > stat.lastPlayedAt) stat.lastPlayedAt = row.played_at;
+      userPlayStats[row.track_id] = stat;
+    });
+
     render();
+  }
+
+  /* ============================================================
+     HELPER: proprietà e attribuzione
+  ============================================================ */
+  function isOwner(row) {
+    return !!row && row.user_id === currentUser.id;
+  }
+
+  function attributionText(row, verb) {
+    const email = profilesById[row.user_id]?.email || "utente sconosciuto";
+    let text = `${verb} da ${email}`;
+    if (row.updated_at && row.updated_at !== row.created_at) {
+      text += ` · modificato il ${formatDate(row.updated_at)}`;
+    }
+    return text;
+  }
+
+  function formatDate(iso) {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleDateString("it-IT", { day: "2-digit", month: "2-digit", year: "numeric" });
   }
 
   /* ============================================================
@@ -528,9 +655,9 @@ if (isAppPage) {
     } else if (sortBy === "artist") {
       arr.sort((a, b) => (a.artist || "").localeCompare(b.artist || "", "it"));
     } else if (sortBy === "plays") {
-      arr.sort((a, b) => (b.play_count || 0) - (a.play_count || 0));
+      arr.sort((a, b) => (userPlayStats[b.id]?.count || 0) - (userPlayStats[a.id]?.count || 0));
     } else if (currentView === "history") {
-      arr.sort((a, b) => new Date(b.last_played_at) - new Date(a.last_played_at));
+      arr.sort((a, b) => new Date(userPlayStats[b.id]?.lastPlayedAt) - new Date(userPlayStats[a.id]?.lastPlayedAt));
     } else {
       arr.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     }
@@ -539,8 +666,8 @@ if (isAppPage) {
 
   function getVisibleTracks() {
     let base;
-    if (currentView === "favorites") base = allTracks.filter((t) => t.is_favorite);
-    else if (currentView === "history") base = allTracks.filter((t) => t.last_played_at);
+    if (currentView === "favorites") base = allTracks.filter((t) => favoriteTrackIds.has(t.id));
+    else if (currentView === "history") base = allTracks.filter((t) => userPlayStats[t.id]);
     else base = allTracks;
 
     const term = searchTerm.trim().toLowerCase();
@@ -555,10 +682,12 @@ if (isAppPage) {
     });
 
     const isPlaylistsView = currentView === "playlists";
-    const isGroupedView = currentView === "artists" || currentView === "albums";
-    const isListView = !isPlaylistsView && !isGroupedView;
+    const isAlbumsView = currentView === "albums";
+    const isGroupedView = currentView === "artists";
+    const isListView = !isPlaylistsView && !isAlbumsView && !isGroupedView;
 
     playlistsPanel.style.display = isPlaylistsView ? "block" : "none";
+    albumsPanel.style.display = isAlbumsView ? "block" : "none";
     groupsPanel.style.display = isGroupedView ? "block" : "none";
     tracksList.style.display = isListView ? "block" : "none";
     sortSelect.style.display = isListView ? "" : "none";
@@ -568,8 +697,13 @@ if (isAppPage) {
       return;
     }
 
+    if (isAlbumsView) {
+      renderAlbums();
+      return;
+    }
+
     if (isGroupedView) {
-      renderGroupedView(currentView === "artists" ? "artist" : "album");
+      renderGroupedView("artist");
       return;
     }
 
@@ -683,7 +817,7 @@ if (isAppPage) {
     li.className = "track-item" + (track.id === nowPlayingId ? " playing" : "");
     li.dataset.trackId = track.id;
 
-    if (opts.playlistId) {
+    if ((opts.playlistId || opts.albumId) && opts.canEdit) {
       li.draggable = true;
       li.addEventListener("dragstart", (e) => {
         e.stopPropagation();
@@ -734,8 +868,9 @@ if (isAppPage) {
     actions.className = "track-actions";
 
     const likeBtn = document.createElement("button");
-    likeBtn.className = "icon-btn like-btn" + (track.is_favorite ? " liked" : "");
-    likeBtn.textContent = track.is_favorite ? "♥" : "♡";
+    const isLiked = favoriteTrackIds.has(track.id);
+    likeBtn.className = "icon-btn like-btn" + (isLiked ? " liked" : "");
+    likeBtn.textContent = isLiked ? "♥" : "♡";
     likeBtn.title = "Preferito";
 
     const addWrap = document.createElement("div");
@@ -743,34 +878,49 @@ if (isAppPage) {
     const addBtn = document.createElement("button");
     addBtn.className = "icon-btn";
     addBtn.textContent = "+";
-    addBtn.title = "Aggiungi a playlist";
+    addBtn.title = "Aggiungi a playlist o album";
     const menu = document.createElement("div");
     menu.className = "add-to-playlist-menu";
 
-    if (!playlists.length) {
-      const empty = document.createElement("span");
-      empty.textContent = "Nessuna playlist";
-      empty.style.cssText = "display:block;padding:6px 8px;color:#9ca3af;font-size:0.75rem;";
-      menu.appendChild(empty);
-    } else {
-      playlists.forEach((pl) => {
+    const ownedPlaylists = playlists.filter((p) => isOwner(p));
+    const ownedAlbums = albums.filter((a) => isOwner(a));
+
+    function addMenuGroup(label, collection, addFn) {
+      const heading = document.createElement("span");
+      heading.textContent = label;
+      heading.style.cssText = "display:block;padding:6px 8px 2px;color:#5b6472;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;";
+      menu.appendChild(heading);
+
+      if (!collection.length) {
+        const empty = document.createElement("span");
+        empty.textContent = `Nessun${label === "Album" ? "" : "a"} ${label.toLowerCase()}`;
+        empty.style.cssText = "display:block;padding:2px 8px 6px;color:#9ca3af;font-size:0.75rem;";
+        menu.appendChild(empty);
+        return;
+      }
+
+      collection.forEach((c) => {
         const item = document.createElement("button");
-        item.textContent = pl.name;
+        item.textContent = c.name;
         item.addEventListener("click", async (e) => {
           e.stopPropagation();
-          await addTrackToPlaylist(track.id, pl.id);
+          await addFn(track.id, c.id);
           menu.classList.remove("open");
         });
         menu.appendChild(item);
       });
     }
+
+    addMenuGroup("Playlist", ownedPlaylists, addTrackToPlaylist);
+    addMenuGroup("Album", ownedAlbums, addTrackToAlbum);
+
     addWrap.appendChild(addBtn);
     addWrap.appendChild(menu);
 
     actions.appendChild(likeBtn);
     actions.appendChild(addWrap);
 
-    if (opts.playlistId) {
+    if (opts.playlistId && opts.canEdit) {
       const removeBtn = document.createElement("button");
       removeBtn.className = "icon-btn";
       removeBtn.textContent = "✕ playlist";
@@ -780,7 +930,27 @@ if (isAppPage) {
         await removeTrackFromPlaylist(track.id, opts.playlistId);
       });
       actions.appendChild(removeBtn);
-    } else {
+    } else if (opts.albumId && opts.canEdit) {
+      const removeBtn = document.createElement("button");
+      removeBtn.className = "icon-btn";
+      removeBtn.textContent = "✕ album";
+      removeBtn.title = "Rimuovi dall'album";
+      removeBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await removeTrackFromAlbum(track.id, opts.albumId);
+      });
+      actions.appendChild(removeBtn);
+    } else if (!opts.playlistId && !opts.albumId && isOwner(track)) {
+      const privacyBtn = document.createElement("button");
+      privacyBtn.className = "icon-btn" + (track.is_private ? " private" : "");
+      privacyBtn.textContent = track.is_private ? "🔒" : "🌍";
+      privacyBtn.title = track.is_private ? "Privato: rendi pubblico" : "Pubblico: rendi privato";
+      privacyBtn.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        await toggleCollectionPrivacy("tracks", track, privacyBtn);
+      });
+      actions.appendChild(privacyBtn);
+
       const deleteBtn = document.createElement("button");
       deleteBtn.className = "icon-btn";
       deleteBtn.textContent = "🗑";
@@ -797,7 +967,7 @@ if (isAppPage) {
     }
 
     tagsRow.appendChild(tagsBox);
-    tagsRow.appendChild(editBtn);
+    if (isOwner(track)) tagsRow.appendChild(editBtn);
     tagsRow.appendChild(actions);
 
     row.appendChild(img);
@@ -805,10 +975,16 @@ if (isAppPage) {
     row.appendChild(tagsRow);
     li.appendChild(row);
 
+    const attribution = document.createElement("p");
+    attribution.className = "track-attribution";
+    attribution.textContent = attributionText(track, "Caricato");
+    li.appendChild(attribution);
+
     // EDITOR INFO INLINE (artista, album, tag)
     const editor = document.createElement("div");
     editor.className = "tag-editor";
     editor.innerHTML = `
+      <input type="text" class="edit-title-input" placeholder="Titolo">
       <div class="info-editor-fields">
         <input type="text" class="edit-artist-input" placeholder="Artista">
         <input type="text" class="edit-album-input" placeholder="Album">
@@ -844,6 +1020,7 @@ if (isAppPage) {
       const isOpen = editor.style.display === "block";
       editor.style.display = isOpen ? "none" : "block";
       if (!isOpen) {
+        editor.querySelector(".edit-title-input").value = track.title || "";
         editor.querySelector(".edit-artist-input").value = track.artist || "";
         editor.querySelector(".edit-album-input").value = track.album || "";
         editorController = setupTagEditor(editor, track.tags || []);
@@ -854,13 +1031,20 @@ if (isAppPage) {
       e.stopPropagation();
       if (!editorController) return;
 
+      const newTitle = editor.querySelector(".edit-title-input").value.trim();
+      if (!newTitle) {
+        showToast("Il titolo non può essere vuoto.");
+        return;
+      }
+
       const newArtist = editor.querySelector(".edit-artist-input").value.trim();
       const newAlbum = editor.querySelector(".edit-album-input").value.trim();
       const newTags = editorController.getTags();
+      const now = new Date().toISOString();
 
       const { error } = await supabase
         .from("tracks")
-        .update({ artist: newArtist || null, album: newAlbum || null, tags: newTags })
+        .update({ title: newTitle, artist: newArtist || null, album: newAlbum || null, tags: newTags, updated_at: now })
         .eq("id", track.id);
 
       if (error) {
@@ -869,13 +1053,18 @@ if (isAppPage) {
         return;
       }
 
+      track.title = newTitle;
       track.artist = newArtist || null;
       track.album = newAlbum || null;
       track.tags = newTags;
+      track.updated_at = now;
 
+      title.textContent = newTitle;
       updateTrackSubtitle();
       renderTagChips(tagsBox, newTags);
+      attribution.textContent = attributionText(track, "Caricato");
       editor.style.display = "none";
+      showToast("Informazioni brano aggiornate.", "success");
     });
 
     return li;
@@ -889,14 +1078,21 @@ if (isAppPage) {
      PREFERITI
   ============================================================ */
   async function toggleFavorite(track) {
-    const newVal = !track.is_favorite;
-    const { error } = await supabase.from("tracks").update({ is_favorite: newVal }).eq("id", track.id);
+    const newVal = !favoriteTrackIds.has(track.id);
+
+    const { error } = newVal
+      ? await supabase.from("track_favorites").insert({ user_id: currentUser.id, track_id: track.id })
+      : await supabase.from("track_favorites").delete().eq("user_id", currentUser.id).eq("track_id", track.id);
+
     if (error) {
       console.error(error);
       showToast("Errore nell'aggiornare i preferiti.");
       return;
     }
-    track.is_favorite = newVal;
+
+    if (newVal) favoriteTrackIds.add(track.id);
+    else favoriteTrackIds.delete(track.id);
+
     if (track.id === nowPlayingId) updateLikeCurrentBtn(track);
 
     if (currentView === "favorites") {
@@ -933,6 +1129,11 @@ if (isAppPage) {
     Object.keys(playlistTracksMap).forEach((pid) => {
       playlistTracksMap[pid] = playlistTracksMap[pid].filter((id) => id !== track.id);
     });
+    Object.keys(albumTracksMap).forEach((aid) => {
+      albumTracksMap[aid] = albumTracksMap[aid].filter((id) => id !== track.id);
+    });
+    favoriteTrackIds.delete(track.id);
+    delete userPlayStats[track.id];
 
     if (track.id === nowPlayingId) {
       audioPlayer.pause();
@@ -955,6 +1156,64 @@ if (isAppPage) {
 
     showToast("Brano eliminato.", "success");
     render();
+  }
+
+  /* ============================================================
+     PRIVACY E RINOMINA (condivisi da playlist e album)
+  ============================================================ */
+  async function toggleCollectionPrivacy(table, row, btn) {
+    const newVal = !row.is_private;
+    const { error } = await supabase.from(table).update({ is_private: newVal }).eq("id", row.id);
+    if (error) {
+      console.error(error);
+      showToast("Errore nell'aggiornare la privacy.");
+      return;
+    }
+    row.is_private = newVal;
+    if (btn) {
+      btn.classList.toggle("private", newVal);
+      btn.textContent = newVal ? "🔒" : "🌍";
+      btn.title = newVal ? "Privato: rendi pubblico" : "Pubblico: rendi privato";
+    }
+    showToast(newVal ? "Reso privato." : "Reso pubblico.", "success");
+  }
+
+  function startInlineRename(nameEl, currentName, onSave) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "inline-rename-input";
+    input.value = currentName;
+    nameEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let settled = false;
+
+    function restore() {
+      if (input.isConnected) input.replaceWith(nameEl);
+    }
+
+    function commit() {
+      if (settled) return;
+      settled = true;
+      const newName = input.value.trim();
+      restore();
+      if (newName && newName !== currentName) onSave(newName);
+    }
+
+    function cancel() {
+      if (settled) return;
+      settled = true;
+      restore();
+    }
+
+    input.addEventListener("click", (e) => e.stopPropagation());
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Enter") commit();
+      if (e.key === "Escape") cancel();
+    });
+    input.addEventListener("blur", commit);
   }
 
   /* ============================================================
@@ -1023,14 +1282,14 @@ if (isAppPage) {
     render();
   }
 
-  async function persistPlaylistOrder(playlistId, orderedTrackIds) {
+  async function persistCollectionOrder(table, ownerColumn, ownerId, orderedTrackIds) {
     const results = await Promise.all(
       orderedTrackIds.map((trackId, index) =>
-        supabase.from("playlist_tracks").update({ position: index }).eq("playlist_id", playlistId).eq("track_id", trackId)
+        supabase.from(table).update({ position: index }).eq(ownerColumn, ownerId).eq("track_id", trackId)
       )
     );
     if (results.some((r) => r.error)) {
-      showToast("Errore nel salvare il nuovo ordine della playlist.");
+      showToast("Errore nel salvare il nuovo ordine.");
     }
   }
 
@@ -1045,6 +1304,8 @@ if (isAppPage) {
     emptyMessage.style.display = "none";
 
     playlists.forEach((pl) => {
+      const canEdit = isOwner(pl);
+
       const li = document.createElement("li");
       li.className = "playlist-item";
 
@@ -1073,35 +1334,73 @@ if (isAppPage) {
         const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
         if (tracks.length) play(tracks[0], tracks);
       });
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.className = "icon-btn";
-      deleteBtn.textContent = "🗑";
-      deleteBtn.title = "Elimina playlist";
-      deleteBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        if (!confirm(`Eliminare la playlist "${pl.name}"?`)) return;
-
-        const { error } = await supabase.from("playlists").delete().eq("id", pl.id);
-        if (error) {
-          console.error(error);
-          showToast("Errore nell'eliminare la playlist.");
-          return;
-        }
-
-        playlists = playlists.filter((p) => p.id !== pl.id);
-        delete playlistTracksMap[pl.id];
-        if (expandedPlaylistId === pl.id) expandedPlaylistId = null;
-        showToast("Playlist eliminata.", "success");
-        render();
-      });
-
       actions.appendChild(playBtn);
-      actions.appendChild(deleteBtn);
+
+      if (canEdit) {
+        const renameBtn = document.createElement("button");
+        renameBtn.className = "icon-btn";
+        renameBtn.textContent = "✏️";
+        renameBtn.title = "Rinomina playlist";
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          startInlineRename(name, pl.name, async (newName) => {
+            const { error } = await supabase.from("playlists").update({ name: newName }).eq("id", pl.id);
+            if (error) {
+              console.error(error);
+              showToast("Errore nel rinominare la playlist.");
+              return;
+            }
+            pl.name = newName;
+            showToast("Playlist rinominata.", "success");
+            render();
+          });
+        });
+        actions.appendChild(renameBtn);
+
+        const privacyBtn = document.createElement("button");
+        privacyBtn.className = "icon-btn" + (pl.is_private ? " private" : "");
+        privacyBtn.textContent = pl.is_private ? "🔒" : "🌍";
+        privacyBtn.title = pl.is_private ? "Privata: rendi pubblica" : "Pubblica: rendi privata";
+        privacyBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await toggleCollectionPrivacy("playlists", pl, privacyBtn);
+        });
+        actions.appendChild(privacyBtn);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "icon-btn";
+        deleteBtn.textContent = "🗑";
+        deleteBtn.title = "Elimina playlist";
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          confirmDelete({
+            title: "Eliminare la playlist?",
+            message: `"${pl.name}" verrà eliminata definitivamente. I brani contenuti non vengono toccati.`,
+            onConfirm: async () => {
+              const { error } = await supabase.from("playlists").delete().eq("id", pl.id);
+              if (error) {
+                console.error(error);
+                showToast("Errore nell'eliminare la playlist.");
+                return;
+              }
+              playlists = playlists.filter((p) => p.id !== pl.id);
+              delete playlistTracksMap[pl.id];
+              if (expandedPlaylistId === pl.id) expandedPlaylistId = null;
+              showToast("Playlist eliminata.", "success");
+              render();
+            },
+          });
+        });
+        actions.appendChild(deleteBtn);
+      }
 
       row.appendChild(name);
       row.appendChild(count);
       row.appendChild(actions);
+
+      const attribution = document.createElement("p");
+      attribution.className = "playlist-attribution";
+      attribution.textContent = attributionText(pl, "Creata");
 
       const detail = document.createElement("div");
       detail.className = "playlist-tracks";
@@ -1109,7 +1408,7 @@ if (isAppPage) {
       // riapre automaticamente la playlist che l'utente aveva già espanso,
       // così azioni come play/like/rimuovi non la richiudono di scatto
       if (expandedPlaylistId === pl.id) {
-        populatePlaylistDetail(detail, pl, trackIds);
+        populatePlaylistDetail(detail, pl, trackIds, canEdit);
         detail.classList.add("open");
       }
 
@@ -1120,12 +1419,13 @@ if (isAppPage) {
       });
 
       li.appendChild(row);
+      li.appendChild(attribution);
       li.appendChild(detail);
       playlistsList.appendChild(li);
     });
   }
 
-  function populatePlaylistDetail(detail, pl, trackIds) {
+  function populatePlaylistDetail(detail, pl, trackIds, canEdit) {
     detail.innerHTML = "";
     const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
 
@@ -1137,16 +1437,230 @@ if (isAppPage) {
     } else {
       const ul = document.createElement("ul");
       ul.className = "tracks-list";
-      tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { playlistId: pl.id })));
+      tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { playlistId: pl.id, canEdit })));
       detail.appendChild(ul);
-      attachDragReorder(ul, pl.id);
+      if (canEdit) attachDragReorder(ul, pl.id, playlistTracksMap, "playlist_tracks", "playlist_id");
     }
   }
 
   /* ============================================================
-     RIORDINO PLAYLIST (drag & drop)
+     ALBUM (stessa logica delle playlist, entità propria)
   ============================================================ */
-  function attachDragReorder(ul, playlistId) {
+  newAlbumBtn?.addEventListener("click", async () => {
+    const name = newAlbumName.value.trim();
+    if (!name) return;
+
+    const { data, error } = await supabase
+      .from("albums")
+      .insert({ user_id: currentUser.id, name })
+      .select()
+      .single();
+
+    if (error) {
+      console.error(error);
+      showToast("Errore nella creazione dell'album.");
+      return;
+    }
+
+    albums.unshift(data);
+    albumTracksMap[data.id] = [];
+    newAlbumName.value = "";
+    showToast(`Album "${data.name}" creato.`, "success");
+    render();
+  });
+
+  async function addTrackToAlbum(trackId, albumId) {
+    const nextPosition = (albumTracksMap[albumId] || []).length;
+
+    const { error } = await supabase
+      .from("album_tracks")
+      .insert({ album_id: albumId, track_id: trackId, position: nextPosition });
+
+    if (error && error.code !== "23505") {
+      console.error(error);
+      showToast("Errore nell'aggiungere il brano all'album.");
+      return;
+    }
+
+    if (!albumTracksMap[albumId]) albumTracksMap[albumId] = [];
+    if (!albumTracksMap[albumId].includes(trackId)) {
+      albumTracksMap[albumId].push(trackId);
+      const al = albums.find((a) => a.id === albumId);
+      showToast(al ? `Aggiunto a "${al.name}".` : "Aggiunto all'album.", "success");
+    }
+
+    if (currentView === "albums") render();
+  }
+
+  async function removeTrackFromAlbum(trackId, albumId) {
+    const { error } = await supabase
+      .from("album_tracks")
+      .delete()
+      .eq("album_id", albumId)
+      .eq("track_id", trackId);
+
+    if (error) {
+      console.error(error);
+      showToast("Errore nel rimuovere il brano dall'album.");
+      return;
+    }
+
+    albumTracksMap[albumId] = (albumTracksMap[albumId] || []).filter((id) => id !== trackId);
+    render();
+  }
+
+  function renderAlbums() {
+    albumsList.innerHTML = "";
+
+    if (!albums.length) {
+      emptyMessage.textContent = "Nessun album creato.";
+      emptyMessage.style.display = "block";
+      return;
+    }
+    emptyMessage.style.display = "none";
+
+    albums.forEach((al) => {
+      const canEdit = isOwner(al);
+
+      const li = document.createElement("li");
+      li.className = "playlist-item";
+
+      const row = document.createElement("div");
+      row.className = "playlist-item-row";
+
+      const name = document.createElement("span");
+      name.className = "playlist-name";
+      name.textContent = al.name;
+
+      const trackIds = albumTracksMap[al.id] || [];
+
+      const count = document.createElement("span");
+      count.className = "playlist-count";
+      count.textContent = `${trackIds.length} brani`;
+
+      const actions = document.createElement("div");
+      actions.className = "playlist-actions";
+
+      const playBtn = document.createElement("button");
+      playBtn.className = "icon-btn";
+      playBtn.textContent = "▶";
+      playBtn.title = "Riproduci album";
+      playBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
+        if (tracks.length) play(tracks[0], tracks);
+      });
+      actions.appendChild(playBtn);
+
+      if (canEdit) {
+        const renameBtn = document.createElement("button");
+        renameBtn.className = "icon-btn";
+        renameBtn.textContent = "✏️";
+        renameBtn.title = "Rinomina album";
+        renameBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          startInlineRename(name, al.name, async (newName) => {
+            const { error } = await supabase.from("albums").update({ name: newName }).eq("id", al.id);
+            if (error) {
+              console.error(error);
+              showToast("Errore nel rinominare l'album.");
+              return;
+            }
+            al.name = newName;
+            showToast("Album rinominato.", "success");
+            render();
+          });
+        });
+        actions.appendChild(renameBtn);
+
+        const privacyBtn = document.createElement("button");
+        privacyBtn.className = "icon-btn" + (al.is_private ? " private" : "");
+        privacyBtn.textContent = al.is_private ? "🔒" : "🌍";
+        privacyBtn.title = al.is_private ? "Privato: rendi pubblico" : "Pubblico: rendi privato";
+        privacyBtn.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          await toggleCollectionPrivacy("albums", al, privacyBtn);
+        });
+        actions.appendChild(privacyBtn);
+
+        const deleteBtn = document.createElement("button");
+        deleteBtn.className = "icon-btn";
+        deleteBtn.textContent = "🗑";
+        deleteBtn.title = "Elimina album";
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          confirmDelete({
+            title: "Eliminare l'album?",
+            message: `"${al.name}" verrà eliminato definitivamente. I brani contenuti non vengono toccati.`,
+            onConfirm: async () => {
+              const { error } = await supabase.from("albums").delete().eq("id", al.id);
+              if (error) {
+                console.error(error);
+                showToast("Errore nell'eliminare l'album.");
+                return;
+              }
+              albums = albums.filter((a) => a.id !== al.id);
+              delete albumTracksMap[al.id];
+              if (expandedAlbumId === al.id) expandedAlbumId = null;
+              showToast("Album eliminato.", "success");
+              render();
+            },
+          });
+        });
+        actions.appendChild(deleteBtn);
+      }
+
+      row.appendChild(name);
+      row.appendChild(count);
+      row.appendChild(actions);
+
+      const attribution = document.createElement("p");
+      attribution.className = "playlist-attribution";
+      attribution.textContent = attributionText(al, "Creato");
+
+      const detail = document.createElement("div");
+      detail.className = "playlist-tracks";
+
+      if (expandedAlbumId === al.id) {
+        populateAlbumDetail(detail, al, trackIds, canEdit);
+        detail.classList.add("open");
+      }
+
+      row.addEventListener("click", () => {
+        const isOpen = expandedAlbumId === al.id;
+        expandedAlbumId = isOpen ? null : al.id;
+        render();
+      });
+
+      li.appendChild(row);
+      li.appendChild(attribution);
+      li.appendChild(detail);
+      albumsList.appendChild(li);
+    });
+  }
+
+  function populateAlbumDetail(detail, al, trackIds, canEdit) {
+    detail.innerHTML = "";
+    const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
+
+    if (!tracks.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "Nessun brano in questo album.";
+      empty.style.cssText = "font-size:0.8rem;color:#9ca3af;";
+      detail.appendChild(empty);
+    } else {
+      const ul = document.createElement("ul");
+      ul.className = "tracks-list";
+      tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { albumId: al.id, canEdit })));
+      detail.appendChild(ul);
+      if (canEdit) attachDragReorder(ul, al.id, albumTracksMap, "album_tracks", "album_id");
+    }
+  }
+
+  /* ============================================================
+     RIORDINO PLAYLIST/ALBUM (drag & drop)
+  ============================================================ */
+  function attachDragReorder(ul, ownerId, tracksMap, table, ownerColumn) {
     let dropBefore = true;
 
     function clearDropIndicators() {
@@ -1184,17 +1698,17 @@ if (isAppPage) {
       const targetId = targetLi.dataset.trackId;
       if (targetId === draggedId) return;
 
-      const ids = (playlistTracksMap[playlistId] || []).slice();
+      const ids = (tracksMap[ownerId] || []).slice();
       const from = ids.indexOf(draggedId);
       if (from === -1 || !ids.includes(targetId)) return;
 
       ids.splice(from, 1);
       const targetIndex = ids.indexOf(targetId); // ricalcolato dopo la rimozione
       ids.splice(targetIndex + (dropBefore ? 0 : 1), 0, draggedId);
-      playlistTracksMap[playlistId] = ids;
+      tracksMap[ownerId] = ids;
 
       render();
-      await persistPlaylistOrder(playlistId, ids);
+      await persistCollectionOrder(table, ownerColumn, ownerId, ids);
     });
   }
 
@@ -1243,13 +1757,17 @@ if (isAppPage) {
   }
 
   function registerPlay(track) {
-    track.play_count = (track.play_count || 0) + 1;
-    track.last_played_at = new Date().toISOString();
+    const now = new Date().toISOString();
+    const stat = userPlayStats[track.id] || { count: 0, lastPlayedAt: null };
+    stat.count += 1;
+    stat.lastPlayedAt = now;
+    userPlayStats[track.id] = stat;
 
+    // cronologia/ascolti sono personali: un insert in track_plays, mai un
+    // update su tracks (di cui potremmo non essere proprietari)
     supabase
-      .from("tracks")
-      .update({ play_count: track.play_count, last_played_at: track.last_played_at })
-      .eq("id", track.id)
+      .from("track_plays")
+      .insert({ user_id: currentUser.id, track_id: track.id, played_at: now })
       .then(({ error }) => {
         if (error) console.error("Errore aggiornamento cronologia:", error);
       });
@@ -1265,8 +1783,9 @@ if (isAppPage) {
   }
 
   function updateLikeCurrentBtn(track) {
-    likeCurrentBtn.classList.toggle("liked", !!track.is_favorite);
-    likeCurrentBtn.textContent = track.is_favorite ? "♥" : "🤍";
+    const liked = favoriteTrackIds.has(track.id);
+    likeCurrentBtn.classList.toggle("liked", liked);
+    likeCurrentBtn.textContent = liked ? "♥" : "🤍";
   }
 
   function pickNextIndex() {

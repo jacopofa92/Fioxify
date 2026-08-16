@@ -71,6 +71,14 @@
             <ul id="playlists-list" class="playlists-list"></ul>
           </div>
 
+          <div id="albums-panel" class="playlists-panel">
+            <div class="new-playlist-row">
+              <input type="text" id="new-album-name" placeholder="Nome nuovo album" />
+              <button id="new-album-btn" class="btn-primary">Crea</button>
+            </div>
+            <ul id="albums-list" class="playlists-list"></ul>
+          </div>
+
           <div id="groups-panel" class="playlists-panel">
             <ul id="groups-list" class="playlists-list"></ul>
           </div>
@@ -85,10 +93,11 @@
     <section id="page-upload" class="app-page">
       <div class="upload-section">
         <h2 class="page-title">Carica un brano</h2>
-        <div class="upload-inner">
-          <input type="file" id="file-input" accept="audio/*" />
+        <div class="upload-inner" id="upload-dropzone">
+          <p class="dropzone-hint">Trascina qui uno o più file audio, oppure scegli i file</p>
+          <input type="file" id="file-input" accept="audio/*" multiple />
 
-          <!-- TAG SYSTEM UPLOAD -->
+          <!-- TAG SYSTEM UPLOAD (applicati a tutti i file caricati insieme) -->
           <div class="tags-box">
             <div id="tags-container" class="tags-container"></div>
             <input
