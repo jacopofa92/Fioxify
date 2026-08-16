@@ -493,6 +493,21 @@ body.has-mini-player .app-main {
   display: none;
 }
 
+.mini-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--bg-surface-3);
+}
+
+.mini-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent-strong), var(--accent));
+}
+
 .mini-player-cover {
   width: 42px;
   height: 42px;
@@ -563,18 +578,49 @@ body.has-mini-player .app-main {
   display: none;
 }
 
-.collapse-player-btn {
-  align-self: flex-start;
-  background: transparent;
-  border: none;
+.full-player-header {
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.full-player-heading {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
   color: var(--text-secondary);
-  font-size: 0.85rem;
-  font-weight: 600;
-  padding: 10px 6px;
-  margin-bottom: 8px;
+}
+
+.full-player-header-spacer {
+  width: 36px;
+  height: 36px;
+}
+
+.collapse-player-btn {
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  padding: 0;
+}
+
+.collapse-player-btn svg {
+  width: 18px;
+  height: 18px;
 }
 
 .collapse-player-btn:hover {
+  background: var(--bg-surface-3);
   color: var(--text-primary);
 }
 

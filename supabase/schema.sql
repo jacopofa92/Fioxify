@@ -86,6 +86,10 @@ alter table public.tracks add column if not exists last_played_at timestamptz;
 alter table public.tracks add column if not exists is_private boolean not null default false;
 alter table public.tracks add column if not exists updated_at timestamptz;
 
+-- durata del brano in secondi (interi), letta dal file audio al momento del
+-- caricamento; resta null per i brani caricati prima di questa colonna
+alter table public.tracks add column if not exists duration integer;
+
 drop policy if exists "tracks_select_own" on public.tracks;
 drop policy if exists "tracks_select_visible" on public.tracks;
 create policy "tracks_select_visible" on public.tracks

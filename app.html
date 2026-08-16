@@ -145,6 +145,7 @@
 
   <!-- MINI PLAYER (persistente, tocca per aprire la vista estesa) -->
   <div id="mini-player" class="mini-player" hidden>
+    <div class="mini-progress"><div id="mini-progress-fill" class="mini-progress-fill"></div></div>
     <img id="mini-cover" class="mini-player-cover" alt="Cover" />
     <div class="mini-player-info">
       <span id="mini-track-name" class="mini-player-title"></span>
@@ -155,7 +156,13 @@
 
   <!-- PLAYER ESTESO (a schermo intero, come il "Now Playing" di Spotify) -->
   <div id="full-player" class="full-player-overlay" hidden>
-    <button id="collapse-player-btn" class="collapse-player-btn" title="Chiudi">⌄ In riproduzione</button>
+    <div class="full-player-header">
+      <button id="collapse-player-btn" class="collapse-player-btn" title="Chiudi" aria-label="Chiudi">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
+      <span class="full-player-heading">In riproduzione</span>
+      <span class="full-player-header-spacer"></span>
+    </div>
 
     <section class="player-section">
       <div class="current-track">

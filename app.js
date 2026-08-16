@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.1.1";
+const APP_VERSION = "1.2.1";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -236,6 +236,7 @@ if (isAppPage) {
   const miniTrackName = document.getElementById("mini-track-name");
   const miniTrackArtist = document.getElementById("mini-track-artist");
   const miniPlayPauseBtn = document.getElementById("mini-play-pause-btn");
+  const miniProgressFill = document.getElementById("mini-progress-fill");
   const fullPlayer = document.getElementById("full-player");
   const collapsePlayerBtn = document.getElementById("collapse-player-btn");
 
@@ -386,8 +387,30 @@ if (isAppPage) {
     });
   }
 
+  function readAudioDuration(file) {
+    return new Promise((resolve) => {
+      const audio = document.createElement("audio");
+      const url = URL.createObjectURL(file);
+      audio.preload = "metadata";
+
+      function done(duration) {
+        URL.revokeObjectURL(url);
+        resolve(duration);
+      }
+
+      audio.addEventListener("loadedmetadata", () => {
+        done(isFinite(audio.duration) ? Math.round(audio.duration) : null);
+      });
+      audio.addEventListener("error", () => done(null));
+      audio.src = url;
+    });
+  }
+
   async function uploadSingleFile(file, existingTitles) {
-    const { title, artist, album, cover } = await readTags(file);
+    const [{ title, artist, album, cover }, duration] = await Promise.all([
+      readTags(file),
+      readAudioDuration(file),
+    ]);
 
     if (existingTitles.has(normalizedTitle(title))) {
       showToast(`"${title}" non caricato: esiste già un brano con lo stesso nome.`);
@@ -413,6 +436,7 @@ if (isAppPage) {
       cover,
       storage_path: audioPath,
       tags: currentTags,
+      duration,
     });
 
     if (dbErr) {
@@ -856,7 +880,9 @@ if (isAppPage) {
 
     function updateTrackSubtitle() {
       const meta = [track.artist, track.album].filter(Boolean).join(" — ");
-      subtitle.textContent = meta || "Aggiungi artista e album";
+      let text = meta || "Aggiungi artista e album";
+      if (track.duration) text += ` · ${formatTime(track.duration)}`;
+      subtitle.textContent = text;
       subtitle.classList.toggle("track-subtitle-empty", !meta);
     }
 
@@ -891,13 +917,13 @@ if (isAppPage) {
     function addMenuGroup(label, collection, addFn) {
       const heading = document.createElement("span");
       heading.textContent = label;
-      heading.style.cssText = "display:block;padding:6px 8px 2px;color:#5b6472;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;";
+      heading.style.cssText = "display:block;padding:6px 8px 2px;color:#656d7d;font-size:0.68rem;text-transform:uppercase;letter-spacing:0.04em;";
       menu.appendChild(heading);
 
       if (!collection.length) {
         const empty = document.createElement("span");
         empty.textContent = `Nessun${label === "Album" ? "" : "a"} ${label.toLowerCase()}`;
-        empty.style.cssText = "display:block;padding:2px 8px 6px;color:#9ca3af;font-size:0.75rem;";
+        empty.style.cssText = "display:block;padding:2px 8px 6px;color:#9aa1b0;font-size:0.75rem;";
         menu.appendChild(empty);
         return;
       }
@@ -1158,6 +1184,7 @@ if (isAppPage) {
       seekBar.value = 0;
       seekBar.max = 0;
       seekBar.style.setProperty("--progress", "0%");
+      if (miniProgressFill) miniProgressFill.style.width = "0%";
       currentTimeLabel.textContent = "0:00";
       durationLabel.textContent = "0:00";
       miniPlayer.hidden = true;
@@ -1452,7 +1479,7 @@ if (isAppPage) {
     if (!tracks.length) {
       const empty = document.createElement("p");
       empty.textContent = "Nessun brano in questa playlist.";
-      empty.style.cssText = "font-size:0.8rem;color:#9ca3af;";
+      empty.style.cssText = "font-size:0.8rem;color:#9aa1b0;";
       detail.appendChild(empty);
     } else {
       const ul = document.createElement("ul");
@@ -1675,7 +1702,7 @@ if (isAppPage) {
     if (!tracks.length) {
       const empty = document.createElement("p");
       empty.textContent = "Nessun brano in questo album.";
-      empty.style.cssText = "font-size:0.8rem;color:#9ca3af;";
+      empty.style.cssText = "font-size:0.8rem;color:#9aa1b0;";
       detail.appendChild(empty);
     } else {
       const ul = document.createElement("ul");
@@ -1764,6 +1791,7 @@ if (isAppPage) {
     seekBar.value = 0;
     seekBar.max = 0;
     seekBar.style.setProperty("--progress", "0%");
+    if (miniProgressFill) miniProgressFill.style.width = "0%";
     currentTimeLabel.textContent = "0:00";
     durationLabel.textContent = "0:00";
 
@@ -1928,6 +1956,7 @@ if (isAppPage) {
     currentTimeLabel.textContent = formatTime(audioPlayer.currentTime);
     const pct = audioPlayer.duration ? (audioPlayer.currentTime / audioPlayer.duration) * 100 : 0;
     seekBar.style.setProperty("--progress", `${pct}%`);
+    if (miniProgressFill) miniProgressFill.style.width = `${pct}%`;
   });
 
   seekBar?.addEventListener("input", () => {
@@ -1935,6 +1964,7 @@ if (isAppPage) {
     currentTimeLabel.textContent = formatTime(audioPlayer.currentTime);
     const pct = seekBar.max ? (seekBar.value / seekBar.max) * 100 : 0;
     seekBar.style.setProperty("--progress", `${pct}%`);
+    if (miniProgressFill) miniProgressFill.style.width = `${pct}%`;
   });
 
   audioPlayer.addEventListener("ended", () => {
