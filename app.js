@@ -692,6 +692,13 @@ if (isAppPage) {
     tracksList.style.display = isListView ? "block" : "none";
     sortSelect.style.display = isListView ? "" : "none";
 
+    const placeholders = {
+      playlists: "Cerca playlist...",
+      albums: "Cerca album...",
+      artists: "Cerca per artista...",
+    };
+    searchInput.placeholder = placeholders[currentView] || "Cerca per titolo, artista o tag...";
+
     if (isPlaylistsView) {
       renderPlaylists();
       return;
@@ -1296,14 +1303,17 @@ if (isAppPage) {
   function renderPlaylists() {
     playlistsList.innerHTML = "";
 
-    if (!playlists.length) {
-      emptyMessage.textContent = "Nessuna playlist creata.";
+    const term = searchTerm.trim().toLowerCase();
+    const visiblePlaylists = term ? playlists.filter((pl) => pl.name.toLowerCase().includes(term)) : playlists;
+
+    if (!visiblePlaylists.length) {
+      emptyMessage.textContent = term ? "Nessuna playlist trovata." : "Nessuna playlist creata.";
       emptyMessage.style.display = "block";
       return;
     }
     emptyMessage.style.display = "none";
 
-    playlists.forEach((pl) => {
+    visiblePlaylists.forEach((pl) => {
       const canEdit = isOwner(pl);
 
       const li = document.createElement("li");
@@ -1332,7 +1342,13 @@ if (isAppPage) {
       playBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
-        if (tracks.length) play(tracks[0], tracks);
+        if (!tracks.length) return;
+        play(tracks[0], tracks);
+        // mostra la scaletta se non è già aperta, così si vede cosa sta suonando
+        if (expandedPlaylistId !== pl.id) {
+          expandedPlaylistId = pl.id;
+          render();
+        }
       });
       actions.appendChild(playBtn);
 
@@ -1512,14 +1528,17 @@ if (isAppPage) {
   function renderAlbums() {
     albumsList.innerHTML = "";
 
-    if (!albums.length) {
-      emptyMessage.textContent = "Nessun album creato.";
+    const term = searchTerm.trim().toLowerCase();
+    const visibleAlbums = term ? albums.filter((al) => al.name.toLowerCase().includes(term)) : albums;
+
+    if (!visibleAlbums.length) {
+      emptyMessage.textContent = term ? "Nessun album trovato." : "Nessun album creato.";
       emptyMessage.style.display = "block";
       return;
     }
     emptyMessage.style.display = "none";
 
-    albums.forEach((al) => {
+    visibleAlbums.forEach((al) => {
       const canEdit = isOwner(al);
 
       const li = document.createElement("li");
@@ -1548,7 +1567,13 @@ if (isAppPage) {
       playBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
-        if (tracks.length) play(tracks[0], tracks);
+        if (!tracks.length) return;
+        play(tracks[0], tracks);
+        // mostra la scaletta se non è già aperta, così si vede cosa sta suonando
+        if (expandedAlbumId !== al.id) {
+          expandedAlbumId = al.id;
+          render();
+        }
       });
       actions.appendChild(playBtn);
 
