@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.1";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -16,7 +16,7 @@ const DEFAULT_COVER =
   "data:image/svg+xml;utf8," +
   encodeURIComponent(
     '<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240">' +
-      '<rect width="240" height="240" fill="#181a22"/>' +
+      '<rect width="240" height="240" fill="#1c1f28"/>' +
       '<text x="50%" y="55%" font-size="110" text-anchor="middle" dominant-baseline="middle" fill="#3b82f6">♪</text>' +
       "</svg>"
   );
@@ -867,10 +867,6 @@ if (isAppPage) {
     tagsBox.className = "track-tags";
     renderTagChips(tagsBox, track.tags || []);
 
-    const editBtn = document.createElement("button");
-    editBtn.className = "edit-tags-btn";
-    editBtn.textContent = "Modifica info";
-
     const actions = document.createElement("div");
     actions.className = "track-actions";
 
@@ -948,6 +944,16 @@ if (isAppPage) {
       });
       actions.appendChild(removeBtn);
     } else if (!opts.playlistId && !opts.albumId && isOwner(track)) {
+      const editBtn = document.createElement("button");
+      editBtn.className = "icon-btn";
+      editBtn.textContent = "✏️";
+      editBtn.title = "Modifica info";
+      editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openEditor();
+      });
+      actions.appendChild(editBtn);
+
       const privacyBtn = document.createElement("button");
       privacyBtn.className = "icon-btn" + (track.is_private ? " private" : "");
       privacyBtn.textContent = track.is_private ? "🔒" : "🌍";
@@ -974,7 +980,6 @@ if (isAppPage) {
     }
 
     tagsRow.appendChild(tagsBox);
-    if (isOwner(track)) tagsRow.appendChild(editBtn);
     tagsRow.appendChild(actions);
 
     row.appendChild(img);
@@ -1022,8 +1027,7 @@ if (isAppPage) {
 
     let editorController = null;
 
-    editBtn.addEventListener("click", (e) => {
-      e.stopPropagation();
+    function openEditor() {
       const isOpen = editor.style.display === "block";
       editor.style.display = isOpen ? "none" : "block";
       if (!isOpen) {
@@ -1032,7 +1036,7 @@ if (isAppPage) {
         editor.querySelector(".edit-album-input").value = track.album || "";
         editorController = setupTagEditor(editor, track.tags || []);
       }
-    });
+    }
 
     editor.querySelector(".tag-editor-save").addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -1949,7 +1953,9 @@ if (isAppPage) {
   document.querySelectorAll(".nav-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
       const targetPage = btn.dataset.page;
-      document.querySelectorAll(".nav-tab").forEach((b) => b.classList.toggle("active", b === btn));
+      // esistono due gruppi di pulsanti (sidebar desktop + barra mobile):
+      // vanno sincronizzati per pagina, non per riferimento al singolo elemento
+      document.querySelectorAll(".nav-tab").forEach((b) => b.classList.toggle("active", b.dataset.page === targetPage));
       document.querySelectorAll(".app-page").forEach((page) => {
         page.classList.toggle("active", page.id === `page-${targetPage}`);
       });

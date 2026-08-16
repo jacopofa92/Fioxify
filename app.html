@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="css/style.css" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
-  <meta name="theme-color" content="#050608" />
+  <meta name="theme-color" content="#0a0b0f" />
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script>
@@ -20,19 +20,30 @@
 
   <!-- HEADER -->
   <header class="app-header">
+    <div class="brand"><span class="brand-mark">🎧</span> Fioxify</div>
     <div class="user-info">
       <span id="user-email"></span>
     </div>
     <button id="logout-btn" class="logout-btn">Logout</button>
   </header>
 
-  <!-- NAVIGAZIONE PRIMARIA -->
-  <nav class="app-nav">
-    <button class="nav-tab active" data-page="library">📚 Libreria</button>
-    <button class="nav-tab" data-page="upload">⬆️ Carica</button>
-  </nav>
+  <div class="app-shell">
 
-  <main class="app-main">
+    <!-- NAVIGAZIONE (sidebar su desktop) -->
+    <aside class="sidebar">
+      <nav class="sidebar-nav">
+        <button class="nav-tab active" data-page="library">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+          <span>Libreria</span>
+        </button>
+        <button class="nav-tab" data-page="upload">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+          <span>Carica</span>
+        </button>
+      </nav>
+    </aside>
+
+    <main class="app-main">
 
     <!-- PAGINA LIBRERIA -->
     <section id="page-library" class="app-page active">
@@ -114,9 +125,23 @@
       </div>
     </section>
 
-  </main>
+    <p class="app-version" id="app-version"></p>
 
-  <p class="app-version" id="app-version"></p>
+    </main>
+
+  </div>
+
+  <!-- NAVIGAZIONE (barra in basso su mobile) -->
+  <nav class="bottom-nav">
+    <button class="nav-tab active" data-page="library">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l11-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>
+      <span>Libreria</span>
+    </button>
+    <button class="nav-tab" data-page="upload">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+      <span>Carica</span>
+    </button>
+  </nav>
 
   <!-- MINI PLAYER (persistente, tocca per aprire la vista estesa) -->
   <div id="mini-player" class="mini-player" hidden>
