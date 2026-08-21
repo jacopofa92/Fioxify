@@ -947,7 +947,7 @@ body.audio-playing .track-item.playing .track-cover-small {
 }
 
 .view-tab {
-  flex: 1 1 30%;
+  flex: 1 1 22%;
   min-width: 84px;
   background: var(--bg-surface-2);
   border: 1px solid var(--border-subtle);
@@ -1088,8 +1088,10 @@ body.audio-playing .track-item.playing .track-cover-small {
 }
 
 /* --------------------------------------------------
-   PLAYLISTS / ALBUM PANEL
+   PLAYLISTS / ALBUM / GRUPPI (liste tipo "collezione")
 -------------------------------------------------- */
+/* nascosta di default: usata solo dal pannello artisti, che condivide
+   la pagina Libreria con la lista brani e si alterna con essa via JS */
 .playlists-panel {
   display: none;
 }
@@ -1323,8 +1325,9 @@ body.audio-playing .track-item.playing .track-cover-small {
   padding: 18px;
 }
 
-/* stato vuoto: icona + messaggio, invece del solo testo */
-#empty-message {
+/* stato vuoto: icona + messaggio, invece del solo testo
+   (condivisa da libreria, album e playlist, ognuna con il proprio elemento) */
+.empty-message {
   display: none;
   text-align: center;
   padding: 40px 16px;
@@ -1333,7 +1336,7 @@ body.audio-playing .track-item.playing .track-cover-small {
   line-height: 1.5;
 }
 
-#empty-message::before {
+.empty-message::before {
   content: "♪";
   display: block;
   font-size: 2.2rem;

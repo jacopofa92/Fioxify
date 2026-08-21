@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.3.0";
+const APP_VERSION = "1.4.0";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -209,14 +209,16 @@ if (isAppPage) {
 
   const searchInput = document.getElementById("search-input");
   const sortSelect = document.getElementById("sort-select");
-  const playlistsPanel = document.getElementById("playlists-panel");
   const newPlaylistName = document.getElementById("new-playlist-name");
   const newPlaylistBtn = document.getElementById("new-playlist-btn");
   const playlistsList = document.getElementById("playlists-list");
-  const albumsPanel = document.getElementById("albums-panel");
+  const playlistsSearchInput = document.getElementById("playlists-search-input");
+  const playlistsEmptyMessage = document.getElementById("playlists-empty-message");
   const newAlbumName = document.getElementById("new-album-name");
   const newAlbumBtn = document.getElementById("new-album-btn");
   const albumsList = document.getElementById("albums-list");
+  const albumsSearchInput = document.getElementById("albums-search-input");
+  const albumsEmptyMessage = document.getElementById("albums-empty-message");
   const groupsPanel = document.getElementById("groups-panel");
   const groupsList = document.getElementById("groups-list");
   const uploadDropzone = document.getElementById("upload-dropzone");
@@ -265,8 +267,10 @@ if (isAppPage) {
   let albumTracksMap = {}; // albumId -> [trackId, ...]
   let favoriteTrackIds = new Set(); // preferiti PERSONALI dell'utente loggato
   let userPlayStats = {}; // trackId -> { count, lastPlayedAt } PERSONALI dell'utente loggato
-  let currentView = "library"; // "library" | "favorites" | "history" | "artists" | "albums" | "playlists"
+  let currentView = "library"; // "library" | "favorites" | "history" | "artists" (sotto-viste della pagina Libreria)
   let searchTerm = "";
+  let albumSearchTerm = "";
+  let playlistSearchTerm = "";
   let sortBy = "date"; // "date" | "title" | "artist" | "plays"
 
   let currentQueue = [];
@@ -657,7 +661,11 @@ if (isAppPage) {
       userPlayStats[row.track_id] = stat;
     });
 
+    // libreria, album e playlist sono ora sezioni indipendenti (non più
+    // sotto-viste esclusive), quindi vanno tenute fresche tutte insieme
     render();
+    renderPlaylists();
+    renderAlbums();
   }
 
   /* ============================================================
@@ -700,6 +708,16 @@ if (isAppPage) {
   sortSelect?.addEventListener("change", () => {
     sortBy = sortSelect.value;
     render();
+  });
+
+  albumsSearchInput?.addEventListener("input", () => {
+    albumSearchTerm = albumsSearchInput.value;
+    renderAlbums();
+  });
+
+  playlistsSearchInput?.addEventListener("input", () => {
+    playlistSearchTerm = playlistsSearchInput.value;
+    renderPlaylists();
   });
 
   function matchesSearch(t, term) {
@@ -745,20 +763,16 @@ if (isAppPage) {
       btn.classList.toggle("active", btn.dataset.view === currentView);
     });
 
-    const isPlaylistsView = currentView === "playlists";
-    const isAlbumsView = currentView === "albums";
     const isGroupedView = currentView === "artists";
-    const isListView = !isPlaylistsView && !isAlbumsView && !isGroupedView;
+    const isListView = !isGroupedView;
 
-    playlistsPanel.style.display = isPlaylistsView ? "block" : "none";
-    albumsPanel.style.display = isAlbumsView ? "block" : "none";
     groupsPanel.style.display = isGroupedView ? "block" : "none";
     tracksList.style.display = isListView ? "block" : "none";
     sortSelect.style.display = isListView ? "" : "none";
     selectModeBtn.style.display = isListView ? "" : "none";
 
     // la selezione multipla ha senso solo nella lista brani semplice:
-    // uscendo verso playlist/album/artisti la si chiude automaticamente
+    // uscendo verso artisti la si chiude automaticamente
     if (!isListView && selectionMode) {
       selectionMode = false;
       selectedTrackIds.clear();
@@ -767,22 +781,7 @@ if (isAppPage) {
       bulkTagRow.hidden = true;
     }
 
-    const placeholders = {
-      playlists: "Cerca playlist...",
-      albums: "Cerca album...",
-      artists: "Cerca per artista...",
-    };
-    searchInput.placeholder = placeholders[currentView] || "Cerca per titolo, artista o tag...";
-
-    if (isPlaylistsView) {
-      renderPlaylists();
-      return;
-    }
-
-    if (isAlbumsView) {
-      renderAlbums();
-      return;
-    }
+    searchInput.placeholder = isGroupedView ? "Cerca per artista..." : "Cerca per titolo, artista o tag...";
 
     if (isGroupedView) {
       renderGroupedView("artist");
@@ -1523,7 +1522,7 @@ if (isAppPage) {
       }
     }
 
-    if (!opts.silent && currentView === "playlists") render();
+    if (!opts.silent) renderPlaylists();
   }
 
   async function removeTrackFromPlaylist(trackId, playlistId) {
@@ -1557,15 +1556,15 @@ if (isAppPage) {
   function renderPlaylists() {
     playlistsList.innerHTML = "";
 
-    const term = searchTerm.trim().toLowerCase();
+    const term = playlistSearchTerm.trim().toLowerCase();
     const visiblePlaylists = term ? playlists.filter((pl) => pl.name.toLowerCase().includes(term)) : playlists;
 
     if (!visiblePlaylists.length) {
-      emptyMessage.textContent = term ? "Nessuna playlist trovata." : "Nessuna playlist creata.";
-      emptyMessage.style.display = "block";
+      playlistsEmptyMessage.textContent = term ? "Nessuna playlist trovata." : "Nessuna playlist creata.";
+      playlistsEmptyMessage.style.display = "block";
       return;
     }
-    emptyMessage.style.display = "none";
+    playlistsEmptyMessage.style.display = "none";
 
     visiblePlaylists.forEach((pl) => {
       const canEdit = isOwner(pl);
@@ -1761,7 +1760,7 @@ if (isAppPage) {
       }
     }
 
-    if (!opts.silent && currentView === "albums") render();
+    if (!opts.silent) renderAlbums();
   }
 
   async function removeTrackFromAlbum(trackId, albumId) {
@@ -1784,15 +1783,15 @@ if (isAppPage) {
   function renderAlbums() {
     albumsList.innerHTML = "";
 
-    const term = searchTerm.trim().toLowerCase();
+    const term = albumSearchTerm.trim().toLowerCase();
     const visibleAlbums = term ? albums.filter((al) => al.name.toLowerCase().includes(term)) : albums;
 
     if (!visibleAlbums.length) {
-      emptyMessage.textContent = term ? "Nessun album trovato." : "Nessun album creato.";
-      emptyMessage.style.display = "block";
+      albumsEmptyMessage.textContent = term ? "Nessun album trovato." : "Nessun album creato.";
+      albumsEmptyMessage.style.display = "block";
       return;
     }
-    emptyMessage.style.display = "none";
+    albumsEmptyMessage.style.display = "none";
 
     visibleAlbums.forEach((al) => {
       const canEdit = isOwner(al);
@@ -2215,6 +2214,9 @@ if (isAppPage) {
       document.querySelectorAll(".app-page").forEach((page) => {
         page.classList.toggle("active", page.id === `page-${targetPage}`);
       });
+      if (targetPage === "library") render();
+      else if (targetPage === "albums") renderAlbums();
+      else if (targetPage === "playlists") renderPlaylists();
     });
   });
 
