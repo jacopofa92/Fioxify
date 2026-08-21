@@ -66,12 +66,40 @@
               class="search-input"
               placeholder="Cerca per titolo, artista o tag..."
             />
-            <select id="sort-select" class="sort-select">
-              <option value="date">Aggiunta di recente</option>
-              <option value="title">Titolo (A-Z)</option>
-              <option value="artist">Artista (A-Z)</option>
-              <option value="plays">Più ascoltati</option>
-            </select>
+            <div class="filters-row-secondary">
+              <select id="sort-select" class="sort-select">
+                <option value="date">Aggiunta di recente</option>
+                <option value="title">Titolo (A-Z)</option>
+                <option value="artist">Artista (A-Z)</option>
+                <option value="plays">Più ascoltati</option>
+              </select>
+              <button id="select-mode-btn" class="icon-btn" title="Seleziona più brani">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- BARRA AZIONI MULTIPLE (visibile solo in modalità selezione) -->
+          <div id="bulk-bar" class="bulk-bar" hidden>
+            <span id="bulk-count" class="bulk-count">0 selezionati</span>
+            <div class="bulk-actions">
+              <div class="add-to-playlist-dropdown">
+                <button id="bulk-add-playlist-btn" class="icon-btn" title="Aggiungi a playlist">+ Playlist</button>
+                <div id="bulk-playlist-menu" class="add-to-playlist-menu"></div>
+              </div>
+              <div class="add-to-playlist-dropdown">
+                <button id="bulk-add-album-btn" class="icon-btn" title="Aggiungi ad album">+ Album</button>
+                <div id="bulk-album-menu" class="add-to-playlist-menu"></div>
+              </div>
+              <button id="bulk-tag-btn" class="icon-btn" title="Aggiungi tag">🏷️</button>
+              <button id="bulk-delete-btn" class="icon-btn" title="Elimina selezionati">🗑</button>
+            </div>
+            <button id="bulk-cancel-btn" class="icon-btn" title="Annulla selezione">✕</button>
+          </div>
+
+          <div id="bulk-tag-row" class="bulk-tag-row" hidden>
+            <input type="text" id="bulk-tag-input" placeholder="Tag da aggiungere ai brani selezionati" />
+            <button id="bulk-tag-apply-btn" class="btn-primary">Applica</button>
           </div>
 
           <div id="playlists-panel" class="playlists-panel">
@@ -156,6 +184,8 @@
 
   <!-- PLAYER ESTESO (a schermo intero, come il "Now Playing" di Spotify) -->
   <div id="full-player" class="full-player-overlay" hidden>
+    <div id="full-player-backdrop" class="full-player-backdrop" aria-hidden="true"></div>
+
     <div class="full-player-header">
       <button id="collapse-player-btn" class="collapse-player-btn" title="Chiudi" aria-label="Chiudi">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>

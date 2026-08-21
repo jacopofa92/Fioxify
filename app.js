@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.2.1";
+const APP_VERSION = "1.3.0";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -221,6 +221,20 @@ if (isAppPage) {
   const groupsList = document.getElementById("groups-list");
   const uploadDropzone = document.getElementById("upload-dropzone");
 
+  const selectModeBtn = document.getElementById("select-mode-btn");
+  const bulkBar = document.getElementById("bulk-bar");
+  const bulkCount = document.getElementById("bulk-count");
+  const bulkAddPlaylistBtn = document.getElementById("bulk-add-playlist-btn");
+  const bulkPlaylistMenu = document.getElementById("bulk-playlist-menu");
+  const bulkAddAlbumBtn = document.getElementById("bulk-add-album-btn");
+  const bulkAlbumMenu = document.getElementById("bulk-album-menu");
+  const bulkTagBtn = document.getElementById("bulk-tag-btn");
+  const bulkDeleteBtn = document.getElementById("bulk-delete-btn");
+  const bulkCancelBtn = document.getElementById("bulk-cancel-btn");
+  const bulkTagRow = document.getElementById("bulk-tag-row");
+  const bulkTagInput = document.getElementById("bulk-tag-input");
+  const bulkTagApplyBtn = document.getElementById("bulk-tag-apply-btn");
+
   const shuffleBtn = document.getElementById("shuffle-btn");
   const prevBtn = document.getElementById("prev-btn");
   const nextBtn = document.getElementById("next-btn");
@@ -238,6 +252,7 @@ if (isAppPage) {
   const miniPlayPauseBtn = document.getElementById("mini-play-pause-btn");
   const miniProgressFill = document.getElementById("mini-progress-fill");
   const fullPlayer = document.getElementById("full-player");
+  const fullPlayerBackdrop = document.getElementById("full-player-backdrop");
   const collapsePlayerBtn = document.getElementById("collapse-player-btn");
 
   /* STATE */
@@ -262,6 +277,9 @@ if (isAppPage) {
   let expandedPlaylistId = null;
   let expandedAlbumId = null;
   let expandedGroupKey = null;
+
+  let selectionMode = false;
+  let selectedTrackIds = new Set();
 
   currentCover.src = DEFAULT_COVER;
 
@@ -329,7 +347,29 @@ if (isAppPage) {
     currentUser = data.session.user;
     userEmailSpan.textContent = currentUser.email || "Utente";
     await loadData();
+    subscribeToRealtimeUpdates();
   })();
+
+  /* ============================================================
+     AGGIORNAMENTO IN TEMPO REALE (libreria condivisa)
+     Quando un altro utente carica/modifica/elimina un brano, una
+     playlist o un album, la vista si aggiorna da sola senza dover
+     ricaricare la pagina.
+  ============================================================ */
+  function subscribeToRealtimeUpdates() {
+    let refreshTimer = null;
+    const scheduleRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => loadData(), 600);
+    };
+
+    const tables = ["tracks", "playlists", "playlist_tracks", "albums", "album_tracks"];
+    let channel = supabase.channel("fioxify-shared-library");
+    tables.forEach((table) => {
+      channel = channel.on("postgres_changes", { event: "*", schema: "public", table }, scheduleRefresh);
+    });
+    channel.subscribe();
+  }
 
   /* LOGOUT */
   logoutBtn?.addEventListener("click", async () => {
@@ -715,6 +755,17 @@ if (isAppPage) {
     groupsPanel.style.display = isGroupedView ? "block" : "none";
     tracksList.style.display = isListView ? "block" : "none";
     sortSelect.style.display = isListView ? "" : "none";
+    selectModeBtn.style.display = isListView ? "" : "none";
+
+    // la selezione multipla ha senso solo nella lista brani semplice:
+    // uscendo verso playlist/album/artisti la si chiude automaticamente
+    if (!isListView && selectionMode) {
+      selectionMode = false;
+      selectedTrackIds.clear();
+      selectModeBtn.classList.remove("active");
+      bulkBar.hidden = true;
+      bulkTagRow.hidden = true;
+    }
 
     const placeholders = {
       playlists: "Cerca playlist...",
@@ -753,9 +804,148 @@ if (isAppPage) {
     emptyMessage.style.display = "none";
 
     list.forEach((track) => {
-      tracksList.appendChild(buildTrackItem(track, list));
+      tracksList.appendChild(buildTrackItem(track, list, { selectable: selectionMode }));
     });
   }
+
+  /* ============================================================
+     AZIONI MULTIPLE (selezione di più brani)
+  ============================================================ */
+  function updateBulkBar() {
+    const count = selectedTrackIds.size;
+    bulkCount.textContent = count === 1 ? "1 selezionato" : `${count} selezionati`;
+
+    const selectedTracks = [...selectedTrackIds].map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
+    const hasOwned = selectedTracks.some((t) => isOwner(t));
+
+    bulkAddPlaylistBtn.disabled = count === 0;
+    bulkAddAlbumBtn.disabled = count === 0;
+    bulkTagBtn.disabled = !hasOwned;
+    bulkDeleteBtn.disabled = !hasOwned;
+  }
+
+  selectModeBtn?.addEventListener("click", () => {
+    selectionMode = !selectionMode;
+    if (!selectionMode) selectedTrackIds.clear();
+    selectModeBtn.classList.toggle("active", selectionMode);
+    bulkBar.hidden = !selectionMode;
+    if (!selectionMode) bulkTagRow.hidden = true;
+    updateBulkBar();
+    render();
+  });
+
+  bulkCancelBtn?.addEventListener("click", () => {
+    selectionMode = false;
+    selectedTrackIds.clear();
+    selectModeBtn.classList.remove("active");
+    bulkBar.hidden = true;
+    bulkTagRow.hidden = true;
+    render();
+  });
+
+  function populateBulkMenu(menuEl, collection, addFn) {
+    menuEl.innerHTML = "";
+    if (!collection.length) {
+      const empty = document.createElement("span");
+      empty.textContent = "Nessuna disponibile";
+      empty.style.cssText = "display:block;padding:6px 8px;color:var(--text-secondary);font-size:0.75rem;";
+      menuEl.appendChild(empty);
+      return;
+    }
+    collection.forEach((c) => {
+      const item = document.createElement("button");
+      item.textContent = c.name;
+      item.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        menuEl.classList.remove("open");
+        const ids = [...selectedTrackIds];
+        await Promise.all(ids.map((trackId) => addFn(trackId, c.id, { silent: true })));
+        showToast(`Aggiunti ${ids.length} brani a "${c.name}".`, "success");
+        render();
+      });
+      menuEl.appendChild(item);
+    });
+  }
+
+  bulkAddPlaylistBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (bulkAddPlaylistBtn.disabled) return;
+    document.querySelectorAll(".add-to-playlist-menu.open").forEach((m) => {
+      if (m !== bulkPlaylistMenu) m.classList.remove("open");
+    });
+    populateBulkMenu(bulkPlaylistMenu, playlists.filter((p) => isOwner(p)), addTrackToPlaylist);
+    bulkPlaylistMenu.classList.toggle("open");
+  });
+
+  bulkAddAlbumBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (bulkAddAlbumBtn.disabled) return;
+    document.querySelectorAll(".add-to-playlist-menu.open").forEach((m) => {
+      if (m !== bulkAlbumMenu) m.classList.remove("open");
+    });
+    populateBulkMenu(bulkAlbumMenu, albums.filter((a) => isOwner(a)), addTrackToAlbum);
+    bulkAlbumMenu.classList.toggle("open");
+  });
+
+  bulkTagBtn?.addEventListener("click", () => {
+    if (bulkTagBtn.disabled) return;
+    bulkTagRow.hidden = !bulkTagRow.hidden;
+    if (!bulkTagRow.hidden) bulkTagInput.focus();
+  });
+
+  bulkTagApplyBtn?.addEventListener("click", async () => {
+    const newTag = bulkTagInput.value.trim();
+    if (!newTag) return;
+
+    const ownedSelected = [...selectedTrackIds]
+      .map((id) => allTracks.find((t) => t.id === id))
+      .filter((t) => t && isOwner(t) && !(t.tags || []).includes(newTag));
+
+    if (!ownedSelected.length) {
+      showToast("Nessun brano da aggiornare (tag già presente o nessun brano di tua proprietà selezionato).");
+      return;
+    }
+
+    const results = await Promise.all(
+      ownedSelected.map((t) => {
+        const newTags = [...(t.tags || []), newTag];
+        return supabase.from("tracks").update({ tags: newTags }).eq("id", t.id).then(({ error }) => {
+          if (!error) t.tags = newTags;
+          return error;
+        });
+      })
+    );
+
+    const failCount = results.filter(Boolean).length;
+    if (failCount) showToast(`Tag aggiunto a ${ownedSelected.length - failCount} brani, ${failCount} falliti.`);
+    else showToast(`Tag "${newTag}" aggiunto a ${ownedSelected.length} brani.`, "success");
+
+    bulkTagInput.value = "";
+    bulkTagRow.hidden = true;
+    render();
+  });
+
+  bulkDeleteBtn?.addEventListener("click", () => {
+    if (bulkDeleteBtn.disabled) return;
+    const ownedSelected = [...selectedTrackIds].map((id) => allTracks.find((t) => t.id === id)).filter((t) => t && isOwner(t));
+    if (!ownedSelected.length) return;
+
+    confirmDelete({
+      title: `Eliminare ${ownedSelected.length} brani?`,
+      message: "I brani selezionati verranno rimossi definitivamente dallo storage e dalla libreria: non si può annullare.",
+      onConfirm: async () => {
+        for (const t of ownedSelected) {
+          await deleteTrack(t, { silent: true });
+        }
+        showToast(`${ownedSelected.length} brani eliminati.`, "success");
+        selectedTrackIds.clear();
+        selectionMode = false;
+        selectModeBtn.classList.remove("active");
+        bulkBar.hidden = true;
+        render();
+      },
+    });
+  });
 
   /* ============================================================
      VISTA ARTISTI / ALBUM (raggruppamento)
@@ -846,6 +1036,7 @@ if (isAppPage) {
   function buildTrackItem(track, queueList, opts = {}) {
     const li = document.createElement("li");
     li.className = "track-item" + (track.id === nowPlayingId ? " playing" : "");
+    if (opts.selectable && selectedTrackIds.has(track.id)) li.classList.add("selected");
     li.dataset.trackId = track.id;
 
     if ((opts.playlistId || opts.albumId) && opts.canEdit) {
@@ -1008,6 +1199,22 @@ if (isAppPage) {
     tagsRow.appendChild(tagsBox);
     tagsRow.appendChild(actions);
 
+    let selectCheckbox = null;
+    if (opts.selectable) {
+      selectCheckbox = document.createElement("input");
+      selectCheckbox.type = "checkbox";
+      selectCheckbox.className = "track-select-checkbox";
+      selectCheckbox.checked = selectedTrackIds.has(track.id);
+      selectCheckbox.addEventListener("click", (e) => e.stopPropagation());
+      selectCheckbox.addEventListener("change", () => {
+        if (selectCheckbox.checked) selectedTrackIds.add(track.id);
+        else selectedTrackIds.delete(track.id);
+        li.classList.toggle("selected", selectCheckbox.checked);
+        updateBulkBar();
+      });
+      row.appendChild(selectCheckbox);
+    }
+
     row.appendChild(img);
     row.appendChild(info);
     row.appendChild(tagsRow);
@@ -1035,8 +1242,16 @@ if (isAppPage) {
     `;
     li.appendChild(editor);
 
-    // CLICK PLAY (solo sul li, non sui pulsanti)
-    li.addEventListener("click", () => play(track, queueList));
+    // CLICK PLAY (solo sul li, non sui pulsanti) — in modalità selezione,
+    // il click seleziona/deseleziona invece di riprodurre
+    li.addEventListener("click", () => {
+      if (opts.selectable && selectCheckbox) {
+        selectCheckbox.checked = !selectCheckbox.checked;
+        selectCheckbox.dispatchEvent(new Event("change"));
+        return;
+      }
+      play(track, queueList);
+    });
 
     likeBtn.addEventListener("click", async (e) => {
       e.stopPropagation();
@@ -1148,17 +1363,17 @@ if (isAppPage) {
   /* ============================================================
      ELIMINAZIONE BRANO
   ============================================================ */
-  async function deleteTrack(track) {
+  async function deleteTrack(track, opts = {}) {
     const { error: storageErr } = await supabase.storage.from(BUCKET_NAME).remove([track.storage_path]);
     if (storageErr) {
       console.error(storageErr);
-      showToast("Errore nell'eliminare il file audio dallo storage.");
+      if (!opts.silent) showToast("Errore nell'eliminare il file audio dallo storage.");
     }
 
     const { error: dbErr } = await supabase.from("tracks").delete().eq("id", track.id);
     if (dbErr) {
       console.error(dbErr);
-      showToast("Errore nell'eliminare il brano.");
+      if (!opts.silent) showToast("Errore nell'eliminare il brano.");
       return;
     }
 
@@ -1170,6 +1385,7 @@ if (isAppPage) {
       albumTracksMap[aid] = albumTracksMap[aid].filter((id) => id !== track.id);
     });
     favoriteTrackIds.delete(track.id);
+    selectedTrackIds.delete(track.id);
     delete userPlayStats[track.id];
 
     if (track.id === nowPlayingId) {
@@ -1181,6 +1397,7 @@ if (isAppPage) {
       currentTrackName.textContent = "Nessun brano in riproduzione";
       currentTrackArtist.textContent = "";
       currentCover.src = DEFAULT_COVER;
+      if (fullPlayerBackdrop) fullPlayerBackdrop.style.backgroundImage = "";
       seekBar.value = 0;
       seekBar.max = 0;
       seekBar.style.setProperty("--progress", "0%");
@@ -1192,8 +1409,12 @@ if (isAppPage) {
       document.body.classList.remove("has-mini-player");
     }
 
-    showToast("Brano eliminato.", "success");
-    render();
+    if (selectionMode) updateBulkBar();
+
+    if (!opts.silent) {
+      showToast("Brano eliminato.", "success");
+      render();
+    }
   }
 
   /* ============================================================
@@ -1280,7 +1501,7 @@ if (isAppPage) {
     render();
   });
 
-  async function addTrackToPlaylist(trackId, playlistId) {
+  async function addTrackToPlaylist(trackId, playlistId, opts = {}) {
     const nextPosition = (playlistTracksMap[playlistId] || []).length;
 
     const { error } = await supabase
@@ -1289,18 +1510,20 @@ if (isAppPage) {
 
     if (error && error.code !== "23505") {
       console.error(error);
-      showToast("Errore nell'aggiungere il brano alla playlist.");
+      if (!opts.silent) showToast("Errore nell'aggiungere il brano alla playlist.");
       return;
     }
 
     if (!playlistTracksMap[playlistId]) playlistTracksMap[playlistId] = [];
     if (!playlistTracksMap[playlistId].includes(trackId)) {
       playlistTracksMap[playlistId].push(trackId);
-      const pl = playlists.find((p) => p.id === playlistId);
-      showToast(pl ? `Aggiunto a "${pl.name}".` : "Aggiunto alla playlist.", "success");
+      if (!opts.silent) {
+        const pl = playlists.find((p) => p.id === playlistId);
+        showToast(pl ? `Aggiunto a "${pl.name}".` : "Aggiunto alla playlist.", "success");
+      }
     }
 
-    if (currentView === "playlists") render();
+    if (!opts.silent && currentView === "playlists") render();
   }
 
   async function removeTrackFromPlaylist(trackId, playlistId) {
@@ -1516,7 +1739,7 @@ if (isAppPage) {
     render();
   });
 
-  async function addTrackToAlbum(trackId, albumId) {
+  async function addTrackToAlbum(trackId, albumId, opts = {}) {
     const nextPosition = (albumTracksMap[albumId] || []).length;
 
     const { error } = await supabase
@@ -1525,18 +1748,20 @@ if (isAppPage) {
 
     if (error && error.code !== "23505") {
       console.error(error);
-      showToast("Errore nell'aggiungere il brano all'album.");
+      if (!opts.silent) showToast("Errore nell'aggiungere il brano all'album.");
       return;
     }
 
     if (!albumTracksMap[albumId]) albumTracksMap[albumId] = [];
     if (!albumTracksMap[albumId].includes(trackId)) {
       albumTracksMap[albumId].push(trackId);
-      const al = albums.find((a) => a.id === albumId);
-      showToast(al ? `Aggiunto a "${al.name}".` : "Aggiunto all'album.", "success");
+      if (!opts.silent) {
+        const al = albums.find((a) => a.id === albumId);
+        showToast(al ? `Aggiunto a "${al.name}".` : "Aggiunto all'album.", "success");
+      }
     }
 
-    if (currentView === "albums") render();
+    if (!opts.silent && currentView === "albums") render();
   }
 
   async function removeTrackFromAlbum(trackId, albumId) {
@@ -1801,6 +2026,7 @@ if (isAppPage) {
     currentTrackName.textContent = track.title;
     currentTrackArtist.textContent = metaLine;
     currentCover.src = track.cover || DEFAULT_COVER;
+    if (fullPlayerBackdrop) fullPlayerBackdrop.style.backgroundImage = `url("${track.cover || DEFAULT_COVER}")`;
     updateLikeCurrentBtn(track);
     updatePlayingHighlight();
 

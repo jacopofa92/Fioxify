@@ -328,3 +328,23 @@ drop policy if exists "fioxisongs_delete_own" on storage.objects;
 create policy "fioxisongs_delete_own" on storage.objects
   for delete to authenticated
   using (bucket_id = 'Fioxisongs' and (storage.foldername(name))[1] = auth.uid()::text);
+
+-- ------------------------------------------------------------
+-- REALTIME: la libreria condivisa si aggiorna da sola quando un
+-- altro utente carica un brano, crea/modifica una playlist o un
+-- album (senza bisogno di ricaricare la pagina).
+-- ------------------------------------------------------------
+do $$
+declare
+  t text;
+begin
+  foreach t in array array['tracks', 'playlists', 'playlist_tracks', 'albums', 'album_tracks']
+  loop
+    if not exists (
+      select 1 from pg_publication_tables
+      where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = t
+    ) then
+      execute format('alter publication supabase_realtime add table public.%I', t);
+    end if;
+  end loop;
+end $$;
