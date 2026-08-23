@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.4.0";
+const APP_VERSION = "1.5.1";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -197,6 +197,7 @@ if (isAuthPage) {
 if (isAppPage) {
   const userEmailSpan = document.getElementById("user-email");
   const logoutBtn = document.getElementById("logout-btn");
+  const exitBtn = document.getElementById("exit-btn");
   const fileInput = document.getElementById("file-input");
   const uploadBtn = document.getElementById("upload-btn");
   const uploadStatus = document.getElementById("upload-status");
@@ -379,6 +380,20 @@ if (isAppPage) {
   logoutBtn?.addEventListener("click", async () => {
     await supabase.auth.signOut();
     window.location.href = "index.html";
+  });
+
+  /* ESCI (interrompe l'audio ed esce dall'app, senza fare logout) */
+  exitBtn?.addEventListener("click", () => {
+    audioPlayer.pause();
+    window.close();
+    // window.close() funziona solo sulle finestre aperte da script (o nelle
+    // PWA installate in standalone): se la pagina è ancora visibile dopo
+    // il tentativo, il browser l'ha bloccato e avvisiamo l'utente
+    setTimeout(() => {
+      if (!document.hidden) {
+        showToast('Chiudi la scheda o l\'app dal tuo dispositivo per uscire.');
+      }
+    }, 300);
   });
 
   /* ============================================================

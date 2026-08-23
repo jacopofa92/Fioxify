@@ -8,7 +8,12 @@
   <link rel="stylesheet" href="css/style.css" />
   <link rel="manifest" href="manifest.json" />
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
   <meta name="theme-color" content="#0a0b0f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Fioxify" />
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.39.7/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/jsmediatags@3.9.7/dist/jsmediatags.min.js"></script>
@@ -24,6 +29,7 @@
     <div class="user-info">
       <span id="user-email"></span>
     </div>
+    <button id="exit-btn" class="logout-btn" title="Interrompe la riproduzione e chiude l'app">Esci</button>
     <button id="logout-btn" class="logout-btn">Logout</button>
   </header>
 
