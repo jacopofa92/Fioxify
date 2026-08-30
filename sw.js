@@ -1,6 +1,6 @@
 // Tenere allineato ad APP_VERSION in app.js: cambiarlo forza
 // il service worker a scartare la cache precedente e riscaricare l'app.
-const CACHE_NAME = "fioxify-shell-v1.5.1";
+const CACHE_NAME = "fioxify-shell-v1.6.7";
 
 const SHELL_ASSETS = [
   "index.html",
@@ -29,9 +29,13 @@ self.addEventListener("activate", (event) => {
 });
 
 /* Stale-while-revalidate solo per l'app shell (stesso dominio).
-   Le chiamate a Supabase (auth/storage/DB) e ai CDN esterni
-   passano sempre dritte in rete: qui non vanno né cache né intercettate,
-   perché richiedono sempre dati aggiornati/autenticati. */
+   Le chiamate a Supabase (auth/storage/DB) e ai CDN esterni passano
+   sempre dritte in rete: qui non vanno né cache né intercettate.
+   L'audio dei brani NON passa da qui: il tag <audio> genera le sue
+   richieste di rete in modo poco affidabile attraverso il fetch handler
+   del service worker (su Safari, in particolare, le salta del tutto).
+   La cache dei brani è gestita direttamente in app.js con fetch() +
+   Cache API, che passa sempre in modo affidabile in ogni browser. */
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   if (request.method !== "GET") return;

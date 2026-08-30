@@ -29,6 +29,7 @@
     <div class="user-info">
       <span id="user-email"></span>
     </div>
+    <button id="change-password-btn" class="logout-btn" title="Ti invieremo un'email per impostare una nuova password">Cambia password</button>
     <button id="exit-btn" class="logout-btn" title="Interrompe la riproduzione e chiude l'app">Esci</button>
     <button id="logout-btn" class="logout-btn">Logout</button>
   </header>
@@ -53,6 +54,11 @@
         <button class="nav-tab" data-page="upload">
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
           <span>Carica</span>
+        </button>
+        <button class="nav-tab" data-page="admin" id="admin-nav-tab" hidden>
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.7 7.7 0 0 0-1.7-1L15 3.6h-4l-.4 2.5a7.7 7.7 0 0 0-1.7 1l-2.3-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7.7 7.7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 1.7-1l2.3 1 2-3.4Z"/></svg>
+          <span>Admin</span>
+          <span id="admin-pending-badge" class="nav-badge" hidden>0</span>
         </button>
       </nav>
     </aside>
@@ -205,6 +211,21 @@
       </div>
     </section>
 
+    <!-- PAGINA ADMIN (visibile solo agli amministratori) -->
+    <section id="page-admin" class="app-page">
+      <div class="library-section">
+        <div class="library-inner">
+          <h2 class="page-title">Richieste di registrazione</h2>
+          <p class="admin-section-hint">Gli utenti registrati restano in attesa finché non approvi il loro account.</p>
+          <ul id="admin-pending-list" class="playlists-list"></ul>
+          <p id="admin-pending-empty" class="empty-message"></p>
+
+          <h2 class="page-title admin-section-title">Tutti gli utenti</h2>
+          <ul id="admin-users-list" class="playlists-list"></ul>
+        </div>
+      </div>
+    </section>
+
     <p class="app-version" id="app-version"></p>
 
     </main>
@@ -228,6 +249,10 @@
     <button class="nav-tab" data-page="upload">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
       <span>Carica</span>
+    </button>
+    <button class="nav-tab" data-page="admin" id="admin-nav-tab-mobile" hidden>
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.7 7.7 0 0 0-1.7-1L15 3.6h-4l-.4 2.5a7.7 7.7 0 0 0-1.7 1l-2.3-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7.7 7.7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 1.7-1l2.3 1 2-3.4Z"/></svg>
+      <span>Admin</span>
     </button>
   </nav>
 

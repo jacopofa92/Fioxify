@@ -24,9 +24,17 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+-- SELECT: ognuno vede solo la propria riga (la policy "profiles_select_admin",
+-- che dà agli admin visibilità su tutte le righe per il pannello Admin, è
+-- creata più in basso insieme alla funzione is_admin_user() da cui dipende).
+-- L'attribuzione "caricato da" nella libreria condivisa NON legge questa
+-- tabella direttamente: usa la funzione list_profile_emails() più in basso,
+-- che espone solo id+email a chi è autenticato, senza status/is_admin.
 drop policy if exists "profiles_select_all" on public.profiles;
-create policy "profiles_select_all" on public.profiles
-  for select to authenticated using (true);
+
+drop policy if exists "profiles_select_own" on public.profiles;
+create policy "profiles_select_own" on public.profiles
+  for select using (auth.uid() = id);
 
 drop policy if exists "profiles_update_own" on public.profiles;
 create policy "profiles_update_own" on public.profiles
@@ -348,3 +356,214 @@ begin
     end if;
   end loop;
 end $$;
+
+-- ============================================================
+-- APPROVAZIONE ADMIN: la registrazione è self-service, ma un
+-- nuovo account resta "pending" (nessun accesso alla libreria)
+-- finché un admin non lo approva dal pannello Admin dell'app.
+-- ============================================================
+
+alter table public.profiles add column if not exists status text not null default 'pending';
+alter table public.profiles drop constraint if exists profiles_status_check;
+alter table public.profiles add constraint profiles_status_check
+  check (status in ('pending', 'approved', 'rejected'));
+
+alter table public.profiles add column if not exists is_admin boolean not null default false;
+
+-- ------------------------------------------------------------
+-- Helper functions (security definer: bypassano la RLS di profiles
+-- per evitare ricorsioni nelle policy che le usano)
+-- ------------------------------------------------------------
+create or replace function public.is_admin_user(uid uuid)
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce((select is_admin from public.profiles where id = uid), false);
+$$;
+
+create or replace function public.is_approved()
+returns boolean
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select coalesce(
+    (select status = 'approved' or is_admin from public.profiles where id = auth.uid()),
+    false
+  );
+$$;
+
+revoke execute on function public.is_admin_user(uuid) from anon;
+revoke execute on function public.is_approved() from anon;
+
+-- ------------------------------------------------------------
+-- Trigger: impedisce a un utente normale di auto-approvarsi o
+-- auto-promuoversi admin modificando il proprio profilo
+-- ------------------------------------------------------------
+create or replace function public.protect_profile_privileged_columns()
+returns trigger
+language plpgsql
+security definer set search_path = public
+as $$
+begin
+  if not public.is_admin_user(auth.uid()) then
+    if new.status is distinct from old.status or new.is_admin is distinct from old.is_admin then
+      raise exception 'Non puoi modificare lo stato di approvazione o i permessi admin del tuo profilo.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+revoke execute on function public.protect_profile_privileged_columns() from public;
+
+drop trigger if exists protect_profile_privileged_columns on public.profiles;
+create trigger protect_profile_privileged_columns
+  before update on public.profiles
+  for each row execute function public.protect_profile_privileged_columns();
+
+-- policy che permette agli admin di aggiornare qualsiasi profilo (per approvare/rifiutare)
+drop policy if exists "profiles_update_admin" on public.profiles;
+create policy "profiles_update_admin" on public.profiles
+  for update to authenticated
+  using (public.is_admin_user(auth.uid()))
+  with check (true);
+
+-- policy che permette agli admin di leggere tutte le righe di profiles
+-- (serve al pannello Admin per elencare le richieste di registrazione)
+drop policy if exists "profiles_select_admin" on public.profiles;
+create policy "profiles_select_admin" on public.profiles
+  for select to authenticated
+  using (public.is_admin_user(auth.uid()));
+
+-- funzione che espone solo id+email (mai status/is_admin) a chiunque sia
+-- autenticato: usata dalla libreria condivisa per l'attribuzione
+-- "caricato da", senza dover concedere la lettura diretta della tabella
+create or replace function public.list_profile_emails()
+returns table (id uuid, email text)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select id, email from public.profiles;
+$$;
+
+revoke execute on function public.list_profile_emails() from anon;
+grant execute on function public.list_profile_emails() to authenticated;
+
+revoke execute on function public.handle_new_user() from public;
+
+-- ------------------------------------------------------------
+-- Gate di scrittura: un utente non ancora approvato non può
+-- caricare brani, creare playlist/album, anche bypassando la UI
+-- ------------------------------------------------------------
+drop policy if exists "tracks_insert_own" on public.tracks;
+create policy "tracks_insert_own" on public.tracks
+  for insert with check (auth.uid() = user_id and public.is_approved());
+
+drop policy if exists "playlists_insert_own" on public.playlists;
+create policy "playlists_insert_own" on public.playlists
+  for insert with check (auth.uid() = user_id and public.is_approved());
+
+drop policy if exists "albums_insert_own" on public.albums;
+create policy "albums_insert_own" on public.albums
+  for insert with check (auth.uid() = user_id and public.is_approved());
+
+drop policy if exists "playlist_tracks_insert_own" on public.playlist_tracks;
+create policy "playlist_tracks_insert_own" on public.playlist_tracks
+  for insert with check (
+    public.is_approved()
+    and exists (select 1 from public.playlists p where p.id = playlist_id and p.user_id = auth.uid())
+  );
+
+drop policy if exists "album_tracks_insert_own" on public.album_tracks;
+create policy "album_tracks_insert_own" on public.album_tracks
+  for insert with check (
+    public.is_approved()
+    and exists (select 1 from public.albums a where a.id = album_id and a.user_id = auth.uid())
+  );
+
+drop policy if exists "track_favorites_own" on public.track_favorites;
+create policy "track_favorites_own" on public.track_favorites
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id and public.is_approved());
+
+drop policy if exists "track_plays_own" on public.track_plays;
+create policy "track_plays_own" on public.track_plays
+  for all using (auth.uid() = user_id) with check (auth.uid() = user_id and public.is_approved());
+
+drop policy if exists "fioxisongs_insert_own" on storage.objects;
+create policy "fioxisongs_insert_own" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'Fioxisongs' and (storage.foldername(name))[1] = auth.uid()::text and public.is_approved());
+
+-- ------------------------------------------------------------
+-- Permette al form di registrazione (utente non ancora autenticato) di
+-- sapere se un'email è già registrata, senza esporre l'intera tabella
+-- profiles ad anon: restituisce solo lo status ('pending'/'approved'/
+-- 'rejected') o null se l'email è libera.
+-- ------------------------------------------------------------
+create or replace function public.check_registration_email(check_email text)
+returns text
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select status from public.profiles where lower(email) = lower(check_email) limit 1;
+$$;
+
+grant execute on function public.check_registration_email(text) to anon, authenticated;
+
+-- ------------------------------------------------------------
+-- Per promuovere un account ad admin (accesso al pannello Admin
+-- e approvazione automatica), esegui manualmente nell'SQL Editor:
+--   update public.profiles set is_admin = true, status = 'approved'
+--   where email = 'la-tua-email@esempio.it';
+-- ------------------------------------------------------------
+
+-- ============================================================
+-- SINCRONIZZAZIONE tracks <-> storage.objects (bucket Fioxisongs)
+-- L'eliminazione di un brano dall'app cancella sia il file audio
+-- sia la riga tracks (vedi deleteTrack in app.js). Questo trigger
+-- copre anche la cancellazione fatta a mano dal dashboard Supabase
+-- (Storage): se un file audio sparisce dal bucket, la riga tracks
+-- corrispondente viene rimossa in automatico, invece di restare un
+-- brano "fantasma" visibile in libreria ma non riproducibile.
+--
+-- Manca volutamente la direzione opposta (cancellare una riga
+-- tracks -> cancellare il file dal bucket): storage.objects ha una
+-- protezione nativa di Supabase (trigger storage.protect_delete)
+-- che blocca qualunque DELETE diretto via SQL su quella tabella,
+-- proprio per evitare cancellazioni di file che bypassano la
+-- Storage API. Un trigger lato tracks che provi a fare quel DELETE
+-- fallirebbe sempre con errore 42501, e farebbe fallire anche la
+-- cancellazione della riga tracks stessa (stessa transazione).
+-- Chi cancella una riga tracks direttamente da SQL/Table editor
+-- deve quindi anche rimuovere a mano il file corrispondente dallo
+-- Storage (o passare sempre dall'app, che lo fa già in automatico
+-- tramite la Storage API in deleteTrack()).
+-- ============================================================
+
+create or replace function public.sync_track_delete_from_storage()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if old.bucket_id = 'Fioxisongs' then
+    delete from public.tracks where storage_path = old.name;
+  end if;
+  return old;
+end;
+$$;
+
+drop trigger if exists sync_track_delete_from_storage on storage.objects;
+create trigger sync_track_delete_from_storage
+  after delete on storage.objects
+  for each row execute function public.sync_track_delete_from_storage();

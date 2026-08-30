@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.5.1";
+const APP_VERSION = "1.6.7";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -112,6 +112,22 @@ const isAuthPage =
   window.location.pathname.endsWith("index.html") ||
   window.location.pathname === "/";
 const isAppPage = window.location.pathname.endsWith("app.html");
+const isResetPasswordPage = window.location.pathname.endsWith("reset-password.html");
+
+const REMEMBERED_EMAIL_KEY = "fioxify_remembered_email";
+
+/* legge lo stato di approvazione del profilo dell'utente correntemente
+   autenticato; usato sia in fase di login sia nel controllo sessione
+   di app.html per bloccare gli account non ancora approvati */
+async function fetchOwnProfileStatus(userId) {
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("status, is_admin")
+    .eq("id", userId)
+    .single();
+  if (error) return { status: "pending", is_admin: false };
+  return data;
+}
 
 /* ============================================================
    AUTH PAGE (se usi index.html)
@@ -121,30 +137,54 @@ if (isAuthPage) {
   const tabRegister = document.getElementById("tab-register");
   const loginForm = document.getElementById("login-form");
   const registerForm = document.getElementById("register-form");
+  const forgotForm = document.getElementById("forgot-form");
 
   const loginEmail = document.getElementById("login-email");
   const loginPassword = document.getElementById("login-password");
+  const loginRemember = document.getElementById("login-remember");
   const loginBtn = document.getElementById("login-btn");
   const loginError = document.getElementById("login-error");
+  const forgotPasswordLink = document.getElementById("forgot-password-link");
 
   const registerEmail = document.getElementById("register-email");
   const registerPassword = document.getElementById("register-password");
+  const registerPasswordConfirm = document.getElementById("register-password-confirm");
   const registerBtn = document.getElementById("register-btn");
   const registerError = document.getElementById("register-error");
 
-  tabLogin?.addEventListener("click", () => {
-    tabLogin.classList.add("active");
-    tabRegister.classList.remove("active");
-    loginForm.classList.add("active");
-    registerForm.classList.remove("active");
-  });
+  const forgotEmail = document.getElementById("forgot-email");
+  const forgotBtn = document.getElementById("forgot-btn");
+  const forgotError = document.getElementById("forgot-error");
+  const backToLoginLink = document.getElementById("back-to-login-link");
 
-  tabRegister?.addEventListener("click", () => {
-    tabRegister.classList.add("active");
-    tabLogin.classList.remove("active");
-    registerForm.classList.add("active");
-    loginForm.classList.remove("active");
-  });
+  function showView(name) {
+    tabLogin.classList.toggle("active", name === "login");
+    tabRegister.classList.toggle("active", name === "register");
+    loginForm.classList.toggle("active", name === "login");
+    registerForm.classList.toggle("active", name === "register");
+    forgotForm.classList.toggle("active", name === "forgot");
+    document.getElementById("auth-tabs").hidden = name === "forgot";
+  }
+
+  tabLogin?.addEventListener("click", () => showView("login"));
+  tabRegister?.addEventListener("click", () => showView("register"));
+  forgotPasswordLink?.addEventListener("click", () => showView("forgot"));
+  backToLoginLink?.addEventListener("click", () => showView("login"));
+
+  // precompila l'email se l'utente aveva scelto di ricordarla
+  const rememberedEmail = localStorage.getItem(REMEMBERED_EMAIL_KEY);
+  if (rememberedEmail) {
+    loginEmail.value = rememberedEmail;
+    loginRemember.checked = true;
+  }
+
+  // messaggio mostrato se si arriva qui perché l'account non è (più) approvato
+  const blockedReason = new URLSearchParams(window.location.search).get("blocked");
+  if (blockedReason === "pending") {
+    loginError.textContent = "Il tuo account è in attesa di approvazione da parte di un amministratore.";
+  } else if (blockedReason === "rejected") {
+    loginError.textContent = "La tua registrazione non è stata approvata.";
+  }
 
   loginBtn?.addEventListener("click", async () => {
     loginError.textContent = "";
@@ -155,7 +195,7 @@ if (isAuthPage) {
       return;
     }
 
-    const { error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -164,6 +204,19 @@ if (isAuthPage) {
       return;
     }
 
+    const profile = await fetchOwnProfileStatus(data.user.id);
+    if (!profile.is_admin && profile.status !== "approved") {
+      await supabase.auth.signOut();
+      loginError.textContent =
+        profile.status === "rejected"
+          ? "La tua registrazione non è stata approvata."
+          : "Il tuo account è in attesa di approvazione da parte di un amministratore.";
+      return;
+    }
+
+    if (loginRemember.checked) localStorage.setItem(REMEMBERED_EMAIL_KEY, email);
+    else localStorage.removeItem(REMEMBERED_EMAIL_KEY);
+
     window.location.href = "app.html";
   });
 
@@ -171,24 +224,155 @@ if (isAuthPage) {
     registerError.textContent = "";
     const email = registerEmail.value.trim();
     const password = registerPassword.value.trim();
-    if (!email || !password) {
-      registerError.textContent = "Inserisci email e password.";
+    const passwordConfirm = registerPasswordConfirm.value.trim();
+
+    if (!email || !password || !passwordConfirm) {
+      registerError.textContent = "Compila tutti i campi.";
+      return;
+    }
+    if (password.length < 6) {
+      registerError.textContent = "La password deve avere almeno 6 caratteri.";
+      return;
+    }
+    if (password !== passwordConfirm) {
+      registerError.textContent = "Le password non coincidono.";
       return;
     }
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { data: existingStatus } = await supabase.rpc("check_registration_email", {
+      check_email: email,
+    });
+    if (existingStatus) {
+      registerError.textContent =
+        existingStatus === "pending"
+          ? "Esiste già una registrazione in attesa di approvazione con questa email."
+          : existingStatus === "approved"
+            ? "Esiste già un account con questa email. Prova ad accedere o usa \"Password dimenticata?\"."
+            : "La registrazione con questa email non è stata approvata. Contatta l'amministratore.";
+      return;
+    }
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: new URL("index.html", window.location.href).toString(),
+      },
+    });
     if (error) {
       registerError.textContent = error.message || "Errore di registrazione.";
       return;
     }
 
-    registerError.textContent = "Account creato. Ora fai login.";
+    // niente sessione "pending" in giro: la registrazione richiede
+    // l'approvazione di un admin prima di poter accedere
+    await supabase.auth.signOut();
+
+    registerForm.querySelectorAll("input").forEach((input) => (input.value = ""));
+    registerError.style.color = "var(--success)";
+    registerError.textContent =
+      "Registrazione inviata! Il tuo account è in attesa di approvazione da parte di un amministratore.";
+  });
+
+  forgotBtn?.addEventListener("click", async () => {
+    forgotError.textContent = "";
+    const email = forgotEmail.value.trim();
+    if (!email) {
+      forgotError.textContent = "Inserisci la tua email.";
+      return;
+    }
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: new URL("reset-password.html", window.location.href).toString(),
+    });
+    if (error) {
+      forgotError.textContent = error.message || "Errore durante l'invio dell'email.";
+      return;
+    }
+
+    forgotError.style.color = "var(--success)";
+    forgotError.textContent = "Se l'email è registrata, riceverai a breve un link per reimpostare la password.";
   });
 
   (async () => {
     const { data } = await supabase.auth.getSession();
-    if (data.session) window.location.href = "app.html";
+    if (!data.session) return;
+    const profile = await fetchOwnProfileStatus(data.session.user.id);
+    if (profile.is_admin || profile.status === "approved") {
+      window.location.href = "app.html";
+    } else {
+      await supabase.auth.signOut();
+    }
   })();
+}
+
+/* ============================================================
+   RESET PASSWORD PAGE (reset-password.html, aperta dal link
+   ricevuto via email dopo "Password dimenticata?")
+============================================================ */
+if (isResetPasswordPage) {
+  const hint = document.getElementById("reset-password-hint");
+  const newPasswordInput = document.getElementById("reset-password-new");
+  const confirmPasswordInput = document.getElementById("reset-password-confirm");
+  const submitBtn = document.getElementById("reset-password-btn");
+  const errorEl = document.getElementById("reset-password-error");
+  const backLink = document.getElementById("reset-password-back-link");
+
+  backLink?.addEventListener("click", () => (window.location.href = "index.html"));
+
+  function unlockForm() {
+    hint.textContent = "Scegli una nuova password per il tuo account.";
+    newPasswordInput.disabled = false;
+    confirmPasswordInput.disabled = false;
+    submitBtn.disabled = false;
+  }
+
+  // il link di recupero autentica temporaneamente l'utente e Supabase
+  // emette l'evento PASSWORD_RECOVERY: solo a quel punto sblocchiamo il form
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === "PASSWORD_RECOVERY") unlockForm();
+  });
+
+  // se il link ha già una sessione di recupero valida al caricamento
+  (async () => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session) unlockForm();
+    else {
+      setTimeout(async () => {
+        const { data: retry } = await supabase.auth.getSession();
+        if (retry.session) unlockForm();
+        else hint.textContent = "Link di recupero non valido o scaduto. Richiedine uno nuovo dal login.";
+      }, 2000);
+    }
+  })();
+
+  submitBtn?.addEventListener("click", async () => {
+    errorEl.textContent = "";
+    const password = newPasswordInput.value.trim();
+    const passwordConfirm = confirmPasswordInput.value.trim();
+
+    if (password.length < 6) {
+      errorEl.textContent = "La password deve avere almeno 6 caratteri.";
+      return;
+    }
+    if (password !== passwordConfirm) {
+      errorEl.textContent = "Le password non coincidono.";
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      errorEl.textContent = error.message || "Errore durante l'aggiornamento della password.";
+      return;
+    }
+
+    await supabase.auth.signOut();
+    hint.textContent = "Password aggiornata! Ora puoi accedere con la nuova password.";
+    newPasswordInput.hidden = true;
+    confirmPasswordInput.hidden = true;
+    submitBtn.hidden = true;
+    setTimeout(() => (window.location.href = "index.html"), 1800);
+  });
 }
 
 /* ============================================================
@@ -198,6 +382,13 @@ if (isAppPage) {
   const userEmailSpan = document.getElementById("user-email");
   const logoutBtn = document.getElementById("logout-btn");
   const exitBtn = document.getElementById("exit-btn");
+  const changePasswordBtn = document.getElementById("change-password-btn");
+  const adminNavTab = document.getElementById("admin-nav-tab");
+  const adminNavTabMobile = document.getElementById("admin-nav-tab-mobile");
+  const adminPendingBadge = document.getElementById("admin-pending-badge");
+  const adminPendingList = document.getElementById("admin-pending-list");
+  const adminPendingEmpty = document.getElementById("admin-pending-empty");
+  const adminUsersList = document.getElementById("admin-users-list");
   const fileInput = document.getElementById("file-input");
   const uploadBtn = document.getElementById("upload-btn");
   const uploadStatus = document.getElementById("upload-status");
@@ -260,6 +451,7 @@ if (isAppPage) {
 
   /* STATE */
   let currentUser = null;
+  let isAdmin = false;
   let allTracks = [];
   let profilesById = {}; // userId -> { email }
   let playlists = [];
@@ -277,6 +469,61 @@ if (isAppPage) {
   let currentQueue = [];
   let currentIndex = -1;
   let nowPlayingId = null;
+
+  /* Signed URL dei brani: createSignedUrl genera un token diverso ogni
+     volta. Il riuso qui serve solo a evitare chiamate inutili all'API di
+     Supabase entro la validità del link; la cache vera e propria
+     dell'audio (che evita di riscaricare i byte) è quella sotto,
+     indicizzata su storage_path invece che sull'URL firmato. */
+  const signedUrlCache = new Map(); // storage_path -> { url, expiresAt }
+  const SIGNED_URL_TTL_SECONDS = 3600;
+  const SIGNED_URL_REFRESH_MARGIN_SECONDS = 120;
+
+  async function getTrackAudioUrl(storagePath) {
+    const cached = signedUrlCache.get(storagePath);
+    if (cached && cached.expiresAt > Date.now()) return cached.url;
+
+    const { data, error } = await supabase.storage
+      .from(BUCKET_NAME)
+      .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS);
+    if (error || !data?.signedUrl) {
+      console.error(error);
+      return null;
+    }
+
+    signedUrlCache.set(storagePath, {
+      url: data.signedUrl,
+      expiresAt: Date.now() + (SIGNED_URL_TTL_SECONDS - SIGNED_URL_REFRESH_MARGIN_SECONDS) * 1000,
+    });
+    return data.signedUrl;
+  }
+
+  /* Cache audio persistente lato pagina: le richieste che il tag <audio>
+     genera da solo (per src/seek) non passano in modo affidabile dal
+     Service Worker in tutti i browser (su Safari, in particolare,
+     saltano il fetch handler del SW). Scaricando qui con fetch() e
+     mettendo in Cache API teniamo il file per storage_path (stabile,
+     a differenza del signed URL che cambia token ogni volta) e lo
+     riproduciamo da un blob locale: niente nuova richiesta di rete
+     per un brano già ascoltato, indipendentemente dal browser. */
+  const AUDIO_CACHE_NAME = "fioxify-audio-v1";
+  let currentObjectUrl = null;
+
+  async function getTrackAudioBlob(storagePath, signedUrl) {
+    if (!("caches" in window)) {
+      const response = await fetch(signedUrl);
+      return response.blob();
+    }
+
+    const cache = await caches.open(AUDIO_CACHE_NAME);
+    const cached = await cache.match(storagePath);
+    if (cached) return cached.blob();
+
+    const response = await fetch(signedUrl);
+    if (response.ok) await cache.put(storagePath, response.clone());
+    return response.blob();
+  }
+
   let shuffleOn = false;
   let repeatMode = "none"; // "none" | "all" | "one"
   let expandedPlaylistId = null;
@@ -350,10 +597,138 @@ if (isAppPage) {
       return;
     }
     currentUser = data.session.user;
+
+    const profile = await fetchOwnProfileStatus(currentUser.id);
+    if (!profile.is_admin && profile.status !== "approved") {
+      await supabase.auth.signOut();
+      window.location.href = `index.html?blocked=${profile.status === "rejected" ? "rejected" : "pending"}`;
+      return;
+    }
+
+    isAdmin = !!profile.is_admin;
     userEmailSpan.textContent = currentUser.email || "Utente";
+
+    if (isAdmin) {
+      adminNavTab.hidden = false;
+      adminNavTabMobile.hidden = false;
+      await refreshAdminPendingBadge();
+    }
+
     await loadData();
     subscribeToRealtimeUpdates();
   })();
+
+  /* ============================================================
+     CAMBIO PASSWORD (riusa il flusso nativo "recupero password":
+     invia all'utente loggato un'email con il link per impostarne
+     una nuova, senza bisogno di un provider email esterno)
+  ============================================================ */
+  changePasswordBtn?.addEventListener("click", async () => {
+    const { error } = await supabase.auth.resetPasswordForEmail(currentUser.email, {
+      redirectTo: new URL("reset-password.html", window.location.href).toString(),
+    });
+    if (error) {
+      showToast(error.message || "Errore durante l'invio dell'email.", "error");
+      return;
+    }
+    showToast("Ti abbiamo inviato un'email per impostare la nuova password.", "success");
+  });
+
+  /* ============================================================
+     ADMIN: approvazione nuove registrazioni
+  ============================================================ */
+  async function refreshAdminPendingBadge() {
+    const { count } = await supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    const n = count || 0;
+    adminPendingBadge.hidden = n === 0;
+    adminPendingBadge.textContent = String(n);
+  }
+
+  async function setProfileStatus(userId, status) {
+    const { error } = await supabase.from("profiles").update({ status }).eq("id", userId);
+    if (error) {
+      showToast(error.message || "Operazione non riuscita.", "error");
+      return false;
+    }
+    return true;
+  }
+
+  function renderAdminUserRow(profile, { showActions }) {
+    const li = document.createElement("li");
+    li.className = "playlist-item";
+
+    const row = document.createElement("div");
+    row.className = "playlist-item-row";
+
+    const email = document.createElement("span");
+    email.className = "admin-user-email";
+    email.textContent = profile.email;
+    row.appendChild(email);
+
+    const pill = document.createElement("span");
+    pill.className = `admin-status-pill status-${profile.status}`;
+    pill.textContent = profile.status === "approved" ? "Approvato" : profile.status === "rejected" ? "Rifiutato" : "In attesa";
+    row.appendChild(pill);
+
+    if (showActions) {
+      const actions = document.createElement("div");
+      actions.className = "playlist-actions";
+
+      const approveBtn = document.createElement("button");
+      approveBtn.className = "icon-btn";
+      approveBtn.textContent = "✓ Approva";
+      approveBtn.addEventListener("click", async () => {
+        if (await setProfileStatus(profile.id, "approved")) {
+          showToast(`${profile.email} è stato approvato.`, "success");
+          await renderAdmin();
+        }
+      });
+
+      const rejectBtn = document.createElement("button");
+      rejectBtn.className = "icon-btn";
+      rejectBtn.textContent = "✕ Rifiuta";
+      rejectBtn.addEventListener("click", async () => {
+        if (await setProfileStatus(profile.id, "rejected")) {
+          showToast(`${profile.email} è stato rifiutato.`, "success");
+          await renderAdmin();
+        }
+      });
+
+      actions.appendChild(approveBtn);
+      actions.appendChild(rejectBtn);
+      row.appendChild(actions);
+    }
+
+    li.appendChild(row);
+    return li;
+  }
+
+  async function renderAdmin() {
+    if (!isAdmin) return;
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, status, is_admin, created_at")
+      .order("created_at", { ascending: false });
+    if (error) {
+      showToast(error.message || "Impossibile caricare gli utenti.", "error");
+      return;
+    }
+
+    const pending = data.filter((p) => p.status === "pending");
+    const others = data.filter((p) => p.status !== "pending");
+
+    adminPendingList.innerHTML = "";
+    pending.forEach((p) => adminPendingList.appendChild(renderAdminUserRow(p, { showActions: true })));
+    adminPendingEmpty.textContent = pending.length === 0 ? "Nessuna richiesta in attesa." : "";
+
+    adminUsersList.innerHTML = "";
+    others.forEach((p) => adminUsersList.appendChild(renderAdminUserRow(p, { showActions: false })));
+
+    await refreshAdminPendingBadge();
+  }
 
   /* ============================================================
      AGGIORNAMENTO IN TEMPO REALE (libreria condivisa)
@@ -429,7 +804,9 @@ if (isAppPage) {
 
       jsmediatags.read(file, {
         onSuccess: (tag) => {
-          if (tag.tags.title) extractedTitle = tag.tags.title;
+          // il titolo resta sempre quello del nome file (es. Suno spesso
+          // scrive lo stesso tag ID3 "title" su più varianti dello stesso
+          // brano, il che le farebbe passare per duplicati)
           if (tag.tags.artist) extractedArtist = tag.tags.artist;
           if (tag.tags.album) extractedAlbum = tag.tags.album;
 
@@ -472,19 +849,24 @@ if (isAppPage) {
     ]);
 
     if (existingTitles.has(normalizedTitle(title))) {
-      showToast(`"${title}" non caricato: esiste già un brano con lo stesso nome.`);
-      return false;
+      const reason = `"${title}" (${file.name}): esiste già un brano con lo stesso nome.`;
+      showToast(reason);
+      return { ok: false, reason };
     }
 
     const ext = file.name.split(".").pop();
     const fileName = `${slugify(title)}-${Date.now()}.${ext}`;
     const audioPath = `${currentUser.id}/${fileName}`;
 
-    const { error: audioErr } = await supabase.storage.from(BUCKET_NAME).upload(audioPath, file);
+    // audio immutabile una volta caricato (path univoco per file): cache lunga lato browser/CDN
+    const { error: audioErr } = await supabase.storage
+      .from(BUCKET_NAME)
+      .upload(audioPath, file, { cacheControl: "31536000" });
     if (audioErr) {
       console.error(audioErr);
+      const reason = `"${file.name}": errore di caricamento (${audioErr.message || audioErr}).`;
       showToast(`Errore durante il caricamento di "${file.name}".`);
-      return false;
+      return { ok: false, reason };
     }
 
     const { error: dbErr } = await supabase.from("tracks").insert({
@@ -500,12 +882,13 @@ if (isAppPage) {
 
     if (dbErr) {
       console.error(dbErr);
+      const reason = `"${title}" (${file.name}): errore nel salvataggio metadata (${dbErr.message || dbErr}).`;
       showToast(`Errore nel salvataggio dei metadata di "${title}".`);
-      return false;
+      return { ok: false, reason };
     }
 
     existingTitles.add(normalizedTitle(title));
-    return true;
+    return { ok: true };
   }
 
   async function uploadFiles(files) {
@@ -513,13 +896,15 @@ if (isAppPage) {
 
     const existingTitles = new Set(allTracks.map((t) => normalizedTitle(t.title)));
     let successCount = 0;
+    const failures = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       uploadStatus.textContent =
         files.length > 1 ? `Caricamento ${i + 1}/${files.length}: ${file.name}` : `Caricamento di "${file.name}"...`;
-      const ok = await uploadSingleFile(file, existingTitles);
-      if (ok) successCount++;
+      const result = await uploadSingleFile(file, existingTitles);
+      if (result.ok) successCount++;
+      else failures.push(result.reason);
     }
 
     fileInput.value = "";
@@ -527,9 +912,13 @@ if (isAppPage) {
     renderUploadTags();
 
     const failCount = files.length - successCount;
+    if (failures.length) console.warn("[upload] brani non caricati:\n" + failures.join("\n"));
+
     if (successCount > 0) {
       uploadStatus.textContent =
-        failCount > 0 ? `${successCount} caricati, ${failCount} non caricati.` : `${successCount} brano/i caricato/i!`;
+        failCount > 0
+          ? `${successCount} caricati, ${failCount} non caricati. Motivi in console (F12).`
+          : `${successCount} brano/i caricato/i!`;
       showToast(successCount === 1 ? "Brano caricato!" : `${successCount} brani caricati!`, "success");
     } else {
       uploadStatus.textContent = "Nessun brano caricato.";
@@ -564,7 +953,15 @@ if (isAppPage) {
     uploadDropzone.addEventListener("drop", (e) => {
       e.preventDefault();
       uploadDropzone.classList.remove("drag-over");
-      const files = Array.from(e.dataTransfer.files || []).filter((f) => f.type.startsWith("audio/"));
+      // il drag & drop dal file explorer (a differenza di <input type="file">)
+      // spesso non valorizza file.type per l'audio: si usa anche l'estensione come fallback
+      const AUDIO_EXTENSIONS = /\.(mp3|wav|m4a|aac|ogg|oga|flac|opus|webm|wma)$/i;
+      const rawFiles = Array.from(e.dataTransfer.files || []);
+      console.log(
+        "[drop debug]",
+        rawFiles.map((f) => ({ name: f.name, type: f.type, size: f.size }))
+      );
+      const files = rawFiles.filter((f) => f.type.startsWith("audio/") || AUDIO_EXTENSIONS.test(f.name));
       if (!files.length) {
         showToast("Trascina solo file audio.");
         return;
@@ -620,7 +1017,14 @@ if (isAppPage) {
   /* ============================================================
      LOAD DATA (tracks + playlists dal DB)
   ============================================================ */
+  // loadData parte sia all'avvio sia ad ogni evento realtime sulla libreria
+  // condivisa (debounced): se una chiamata più vecchia risponde dopo che
+  // un'azione locale (es. deleteTrack) ha già aggiornato lo stato, la
+  // risposta stale lo sovrascriverebbe riportando indietro dati già
+  // cancellati/modificati. loadDataToken scarta le risposte fuori ordine.
+  let loadDataToken = 0;
   async function loadData() {
+    const requestToken = ++loadDataToken;
     const [
       { data: trackRows, error: trackErr },
       { data: playlistRows },
@@ -636,7 +1040,7 @@ if (isAppPage) {
       supabase.from("playlist_tracks").select("*").order("position", { ascending: true }),
       supabase.from("albums").select("*").order("created_at", { ascending: false }),
       supabase.from("album_tracks").select("*").order("position", { ascending: true }),
-      supabase.from("profiles").select("*"),
+      supabase.rpc("list_profile_emails"),
       supabase.from("track_favorites").select("track_id").eq("user_id", currentUser.id),
       supabase.from("track_plays").select("track_id, played_at").eq("user_id", currentUser.id),
     ]);
@@ -645,6 +1049,8 @@ if (isAppPage) {
       console.error(trackErr);
       showToast("Errore nel caricamento della libreria.");
     }
+
+    if (requestToken !== loadDataToken) return; // superata da una loadData() più recente
 
     allTracks = trackRows || [];
     playlists = playlistRows || [];
@@ -2014,17 +2420,21 @@ if (isAppPage) {
     currentQueue = queueList.slice();
     currentIndex = currentQueue.findIndex((t) => t.id === track.id);
 
-    const { data: audioSigned, error } = await supabase.storage
-      .from(BUCKET_NAME)
-      .createSignedUrl(track.storage_path, 3600);
-
-    if (error || !audioSigned?.signedUrl) {
-      console.error(error);
+    const audioUrl = await getTrackAudioUrl(track.storage_path);
+    if (!audioUrl) {
       showToast("Errore nella riproduzione del brano.");
       return;
     }
 
-    audioPlayer.src = audioSigned.signedUrl;
+    try {
+      const blob = await getTrackAudioBlob(track.storage_path, audioUrl);
+      if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+      currentObjectUrl = URL.createObjectURL(blob);
+      audioPlayer.src = currentObjectUrl;
+    } catch (err) {
+      console.error(err);
+      audioPlayer.src = audioUrl; // fallback diretto se fetch/cache manuale fallisce
+    }
     audioPlayer.play();
 
     seekBar.value = 0;
@@ -2232,6 +2642,7 @@ if (isAppPage) {
       if (targetPage === "library") render();
       else if (targetPage === "albums") renderAlbums();
       else if (targetPage === "playlists") renderPlaylists();
+      else if (targetPage === "admin") renderAdmin();
     });
   });
 

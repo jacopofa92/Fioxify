@@ -108,6 +108,78 @@ body {
   min-height: 16px;
 }
 
+.auth-tabs {
+  display: flex;
+  gap: 6px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  margin-bottom: 18px;
+}
+
+.auth-tab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 10px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.auth-tab.active {
+  background: var(--bg-surface-3);
+  color: var(--text-primary);
+}
+
+.auth-form {
+  display: none;
+}
+
+.auth-form.active {
+  display: flex;
+}
+
+.auth-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+
+.auth-checkbox-row input {
+  width: auto;
+}
+
+.auth-form .auth-link {
+  background: transparent;
+  border: none;
+  color: var(--accent-2);
+  font-weight: 500;
+  font-size: 0.8rem;
+  padding: 2px;
+  text-align: left;
+  align-self: flex-start;
+}
+
+.auth-form .auth-link:hover {
+  filter: none;
+  transform: none;
+  text-decoration: underline;
+}
+
+.auth-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
 .app-version {
   text-align: center;
   font-size: 0.7rem;
@@ -245,11 +317,35 @@ button {
 }
 
 .nav-tab {
+  position: relative;
   background: transparent;
   border: none;
   color: var(--text-secondary);
   font-weight: 600;
   transition: color 0.15s ease, background 0.15s ease;
+}
+
+.nav-badge {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  line-height: 1;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+}
+
+.sidebar .nav-badge {
+  top: 6px;
+  right: 10px;
 }
 
 .bottom-nav .nav-tab {
@@ -279,6 +375,13 @@ button {
 
 .nav-tab.active {
   color: var(--accent);
+}
+
+/* .bottom-nav .nav-tab e .sidebar .nav-tab impostano display:flex con
+   specificità pari a quella dell'attributo [hidden]: senza questa regola
+   il tab admin resterebbe visibile anche quando JS lo lascia hidden. */
+.nav-tab[hidden] {
+  display: none !important;
 }
 
 @media (min-width: 900px) {
@@ -1174,6 +1277,53 @@ body.audio-playing .track-item.playing .track-cover-small {
 
 .playlist-tracks.open {
   display: block;
+}
+
+/* --------------------------------------------------
+   ADMIN: approvazione registrazioni
+-------------------------------------------------- */
+.admin-section-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-bottom: 14px;
+}
+
+.admin-section-title {
+  margin-top: 26px;
+}
+
+.admin-user-email {
+  font-size: 0.9rem;
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-status-pill {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: 999px;
+}
+
+.admin-status-pill.status-pending {
+  color: var(--warning);
+  background: rgba(242, 171, 61, 0.14);
+}
+
+.admin-status-pill.status-approved {
+  color: var(--success);
+  background: rgba(52, 211, 153, 0.14);
+}
+
+.admin-status-pill.status-rejected {
+  color: var(--danger);
+  background: var(--danger-soft);
 }
 
 /* --------------------------------------------------
