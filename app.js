@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.6.7";
+const APP_VERSION = "1.6.8";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -108,9 +108,12 @@ if ("serviceWorker" in navigator) {
 /* ============================================================
    PAGE DETECTION
 ============================================================ */
+// pathname.endsWith("/") copre anche i root path con sottocartella,
+// es. GitHub Pages "project site" (jacopofa92.github.io/Fioxify/),
+// dove il pathname è "/Fioxify/" e non "/" o "*/index.html"
 const isAuthPage =
   window.location.pathname.endsWith("index.html") ||
-  window.location.pathname === "/";
+  window.location.pathname.endsWith("/");
 const isAppPage = window.location.pathname.endsWith("app.html");
 const isResetPasswordPage = window.location.pathname.endsWith("reset-password.html");
 
