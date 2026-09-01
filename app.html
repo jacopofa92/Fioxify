@@ -29,9 +29,16 @@
     <div class="user-info">
       <span id="user-email"></span>
     </div>
-    <button id="change-password-btn" class="logout-btn" title="Ti invieremo un'email per impostare una nuova password">Cambia password</button>
-    <button id="exit-btn" class="logout-btn" title="Interrompe la riproduzione e chiude l'app">Esci</button>
-    <button id="logout-btn" class="logout-btn">Logout</button>
+    <div class="account-menu">
+      <button id="account-menu-btn" class="account-menu-btn" type="button" aria-haspopup="true" aria-expanded="false" title="Account">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="8" r="4"/></svg>
+      </button>
+      <div id="account-menu-dropdown" class="account-menu-dropdown" hidden>
+        <button id="change-password-btn" class="account-menu-item" title="Ti invieremo un'email per impostare una nuova password">Cambia password</button>
+        <button id="exit-btn" class="account-menu-item" title="Interrompe la riproduzione e chiude l'app">Esci</button>
+        <button id="logout-btn" class="account-menu-item account-menu-item-danger">Logout</button>
+      </div>
+    </div>
   </header>
 
   <div class="app-shell">
@@ -125,6 +132,13 @@
           </div>
 
           <p id="empty-message" class="empty-message"></p>
+          <ul id="tracks-skeleton" class="tracks-skeleton" aria-hidden="true">
+            <li class="skeleton-track-item"><span class="skeleton-block skeleton-cover"></span><span class="skeleton-lines"><span class="skeleton-block skeleton-line-title"></span><span class="skeleton-block skeleton-line-sub"></span></span></li>
+            <li class="skeleton-track-item"><span class="skeleton-block skeleton-cover"></span><span class="skeleton-lines"><span class="skeleton-block skeleton-line-title"></span><span class="skeleton-block skeleton-line-sub"></span></span></li>
+            <li class="skeleton-track-item"><span class="skeleton-block skeleton-cover"></span><span class="skeleton-lines"><span class="skeleton-block skeleton-line-title"></span><span class="skeleton-block skeleton-line-sub"></span></span></li>
+            <li class="skeleton-track-item"><span class="skeleton-block skeleton-cover"></span><span class="skeleton-lines"><span class="skeleton-block skeleton-line-title"></span><span class="skeleton-block skeleton-line-sub"></span></span></li>
+            <li class="skeleton-track-item"><span class="skeleton-block skeleton-cover"></span><span class="skeleton-lines"><span class="skeleton-block skeleton-line-title"></span><span class="skeleton-block skeleton-line-sub"></span></span></li>
+          </ul>
           <ul id="tracks-list" class="tracks-list"></ul>
         </div>
       </div>
@@ -163,6 +177,11 @@
       <div class="library-section">
         <div class="library-inner">
           <h2 class="page-title">Playlist</h2>
+
+          <div id="smart-playlists-panel" hidden>
+            <h3 class="section-subtitle">Automatiche</h3>
+            <ul id="smart-playlists-list" class="playlists-list"></ul>
+          </div>
 
           <div class="filters-row">
             <input
@@ -215,7 +234,30 @@
     <section id="page-admin" class="app-page">
       <div class="library-section">
         <div class="library-inner">
-          <h2 class="page-title">Richieste di registrazione</h2>
+          <h2 class="page-title">Statistiche</h2>
+          <div id="admin-stats-panel" class="admin-stats-panel">
+            <div class="stats-cards">
+              <div class="stat-card"><span class="stat-value" id="stat-total-tracks">–</span><span class="stat-label">Brani totali</span></div>
+              <div class="stat-card"><span class="stat-value" id="stat-total-plays">–</span><span class="stat-label">Ascolti totali</span></div>
+              <div class="stat-card"><span class="stat-value" id="stat-total-users">–</span><span class="stat-label">Utenti</span></div>
+            </div>
+
+            <div class="stats-columns">
+              <div class="stats-column">
+                <h3 class="section-subtitle">Brani più ascoltati</h3>
+                <ol id="stat-top-tracks" class="stat-list"></ol>
+              </div>
+              <div class="stats-column">
+                <h3 class="section-subtitle">Chi carica di più</h3>
+                <ol id="stat-top-uploaders" class="stat-list"></ol>
+              </div>
+            </div>
+
+            <h3 class="section-subtitle">Ascolti, ultimi 30 giorni</h3>
+            <div id="stat-plays-chart" class="stat-bar-chart"></div>
+          </div>
+
+          <h2 class="page-title admin-section-title">Richieste di registrazione</h2>
           <p class="admin-section-hint">Gli utenti registrati restano in attesa finché non approvi il loro account.</p>
           <ul id="admin-pending-list" class="playlists-list"></ul>
           <p id="admin-pending-empty" class="empty-message"></p>
@@ -296,9 +338,14 @@
         <p id="current-track-artist" class="current-track-artist"></p>
       </div>
 
+      <canvas id="audio-visualizer" class="audio-visualizer" aria-hidden="true"></canvas>
+
       <div class="progress-row">
         <span id="current-time" class="time-label">0:00</span>
-        <input type="range" id="seek-bar" class="seek-bar" min="0" max="0" value="0" step="0.1" />
+        <div class="seek-wrap">
+          <canvas id="waveform-canvas" class="waveform-canvas" aria-hidden="true"></canvas>
+          <input type="range" id="seek-bar" class="seek-bar" min="0" max="0" value="0" step="0.1" />
+        </div>
         <span id="duration-time" class="time-label">0:00</span>
       </div>
 
@@ -309,10 +356,15 @@
         <button id="next-btn" class="control-btn" title="Successivo">⏭</button>
         <button id="repeat-btn" class="control-btn" title="Ripeti">🔁</button>
       </div>
+
+      <div id="track-reactions" class="track-reactions"></div>
     </section>
   </div>
 
   <audio id="audio-player" preload="metadata"></audio>
+  <!-- layer secondario usato solo durante il crossfade, per sovrapporre
+       la dissolvenza in entrata del brano successivo -->
+  <audio id="audio-player-crossfade" preload="auto"></audio>
 
   <div id="toast-container" class="toast-container"></div>
 

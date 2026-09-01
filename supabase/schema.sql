@@ -567,3 +567,127 @@ drop trigger if exists sync_track_delete_from_storage on storage.objects;
 create trigger sync_track_delete_from_storage
   after delete on storage.objects
   for each row execute function public.sync_track_delete_from_storage();
+
+-- ============================================================
+-- REAZIONI RAPIDE: emoji che chiunque può lasciare su un brano
+-- visibile (proprio o pubblico di un altro utente). Un utente può
+-- lasciare al massimo una reazione per emoji su un brano (constraint
+-- unique), toggle gestito lato client con insert/delete.
+-- ============================================================
+create table if not exists public.track_reactions (
+  id          uuid primary key default gen_random_uuid(),
+  track_id    uuid not null references public.tracks(id) on delete cascade,
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  emoji       text not null,
+  created_at  timestamptz not null default now(),
+  unique (track_id, user_id, emoji)
+);
+
+alter table public.track_reactions drop constraint if exists track_reactions_emoji_check;
+alter table public.track_reactions add constraint track_reactions_emoji_check
+  check (emoji in ('🔥', '❤️', '😂', '👏', '🤯'));
+
+alter table public.track_reactions enable row level security;
+
+drop policy if exists "track_reactions_select_visible" on public.track_reactions;
+create policy "track_reactions_select_visible" on public.track_reactions
+  for select to authenticated
+  using (
+    exists (
+      select 1 from public.tracks t
+      where t.id = track_reactions.track_id
+        and (t.user_id = auth.uid() or t.is_private = false)
+    )
+  );
+
+drop policy if exists "track_reactions_insert_own" on public.track_reactions;
+create policy "track_reactions_insert_own" on public.track_reactions
+  for insert to authenticated
+  with check (
+    auth.uid() = user_id
+    and public.is_approved()
+    and exists (
+      select 1 from public.tracks t
+      where t.id = track_reactions.track_id
+        and (t.user_id = auth.uid() or t.is_private = false)
+    )
+  );
+
+drop policy if exists "track_reactions_delete_own" on public.track_reactions;
+create policy "track_reactions_delete_own" on public.track_reactions
+  for delete to authenticated
+  using (auth.uid() = user_id);
+
+-- realtime per le reazioni: la tabella esiste solo da qui in poi nello
+-- script, quindi va aggiunta alla pubblicazione qui e non nel blocco
+-- realtime più in alto (che gira prima che track_reactions esista)
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = 'track_reactions'
+  ) then
+    alter publication supabase_realtime add table public.track_reactions;
+  end if;
+end $$;
+
+-- ============================================================
+-- DASHBOARD STATISTICHE (solo admin): track_plays ha RLS che
+-- limita la select alle proprie righe, quindi per aggregare i dati
+-- di ascolto di TUTTI gli utenti serve una funzione security definer
+-- che verifichi lei stessa il ruolo admin invece di affidarsi alla RLS.
+-- ============================================================
+create or replace function public.admin_get_stats()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  result jsonb;
+begin
+  if not public.is_admin_user(auth.uid()) then
+    raise exception 'Non autorizzato.';
+  end if;
+
+  select jsonb_build_object(
+    'total_tracks', (select count(*) from public.tracks),
+    'total_plays', (select count(*) from public.track_plays),
+    'total_users', (select count(*) from public.profiles),
+    'top_tracks', (
+      select coalesce(jsonb_agg(x), '[]'::jsonb) from (
+        select t.id, t.title, t.artist, count(p.id) as play_count
+        from public.tracks t
+        join public.track_plays p on p.track_id = t.id
+        group by t.id, t.title, t.artist
+        order by play_count desc, t.title asc
+        limit 10
+      ) x
+    ),
+    'top_uploaders', (
+      select coalesce(jsonb_agg(x), '[]'::jsonb) from (
+        select pr.email, count(t.id) as track_count
+        from public.tracks t
+        join public.profiles pr on pr.id = t.user_id
+        group by pr.email
+        order by track_count desc, pr.email asc
+        limit 10
+      ) x
+    ),
+    'plays_last_30_days', (
+      select coalesce(jsonb_agg(x), '[]'::jsonb) from (
+        select to_char(date_trunc('day', played_at), 'YYYY-MM-DD') as day, count(*) as plays
+        from public.track_plays
+        where played_at > now() - interval '30 days'
+        group by 1
+        order by 1
+      ) x
+    )
+  ) into result;
+
+  return result;
+end;
+$$;
+
+revoke execute on function public.admin_get_stats() from anon;
+grant execute on function public.admin_get_stats() to authenticated;

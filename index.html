@@ -25,34 +25,34 @@
       <button id="tab-register" class="auth-tab">Registrati</button>
     </div>
 
-    <div id="login-form" class="auth-form active">
+    <form id="login-form" class="auth-form active">
       <input type="email" id="login-email" placeholder="Email" autocomplete="username" />
       <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
       <label class="auth-checkbox-row">
         <input type="checkbox" id="login-remember" />
         <span>Ricorda la mia email</span>
       </label>
-      <button id="login-btn">Entra</button>
+      <button id="login-btn" type="submit">Entra</button>
       <button id="forgot-password-link" class="auth-link" type="button">Password dimenticata?</button>
       <p class="auth-error" id="login-error"></p>
-    </div>
+    </form>
 
-    <div id="register-form" class="auth-form">
+    <form id="register-form" class="auth-form">
       <input type="email" id="register-email" placeholder="Email" autocomplete="username" />
       <input type="password" id="register-password" placeholder="Password" autocomplete="new-password" />
       <input type="password" id="register-password-confirm" placeholder="Conferma password" autocomplete="new-password" />
-      <button id="register-btn">Crea account</button>
+      <button id="register-btn" type="submit">Crea account</button>
       <p class="auth-hint">Dopo la registrazione un amministratore dovrà approvare il tuo account prima che tu possa accedere.</p>
       <p class="auth-error" id="register-error"></p>
-    </div>
+    </form>
 
-    <div id="forgot-form" class="auth-form">
+    <form id="forgot-form" class="auth-form">
       <p class="auth-hint">Inserisci la tua email: ti invieremo un link per impostare una nuova password.</p>
       <input type="email" id="forgot-email" placeholder="Email" autocomplete="username" />
-      <button id="forgot-btn">Invia link di recupero</button>
+      <button id="forgot-btn" type="submit">Invia link di recupero</button>
       <button id="back-to-login-link" class="auth-link" type="button">Torna al login</button>
       <p class="auth-error" id="forgot-error"></p>
-    </div>
+    </form>
 
     <p class="app-version" id="app-version"></p>
   </div>

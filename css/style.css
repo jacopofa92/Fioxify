@@ -226,17 +226,110 @@ button {
   transform: translateY(-1px);
 }
 
-.logout-btn {
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  padding: 8px 12px;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 0.85rem;
+.btn-primary:disabled,
+.auth-form button:disabled,
+#upload-btn:disabled {
+  opacity: 0.85;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
 }
 
-.logout-btn:hover {
+.btn-spinner {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  margin-right: 9px;
+  vertical-align: -3px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  border-top-color: #fff;
+  border-right-color: #fff;
+  animation: btn-spinner-spin 0.65s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+}
+
+@keyframes btn-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* --------------------------------------------------
+   MENU ACCOUNT (tendina: cambia password / esci / logout)
+   Stesso markup per desktop e mobile: essendo posizionato in
+   assoluto rispetto al bottone e ancorato a destra, si adatta da
+   solo senza bisogno di varianti separate per breakpoint.
+-------------------------------------------------- */
+.account-menu {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.account-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  color: var(--text-primary);
+  flex-shrink: 0;
+}
+
+.account-menu-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.account-menu-btn:hover,
+.account-menu.open .account-menu-btn {
   background: var(--bg-surface-3);
+  border-color: var(--border-strong);
+}
+
+.account-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 200px;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 6px;
+  box-shadow: var(--shadow-md);
+  z-index: 500;
+}
+
+/* display:flex va qui, condizionato a :not([hidden]): altrimenti
+   avrebbe la stessa specificità della regola [hidden] del browser e,
+   venendo dopo nel foglio, la batterebbe sempre, tenendo la tendina
+   visibile anche quando hidden=true (bug già preso una volta con
+   .nav-tab, stessa causa). */
+.account-menu-dropdown:not([hidden]) {
+  display: flex;
+}
+
+.account-menu-item {
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 9px 10px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  text-align: left;
+}
+
+.account-menu-item:hover {
+  background: var(--bg-surface-2);
+}
+
+.account-menu-item-danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 
 /* --------------------------------------------------
@@ -464,6 +557,15 @@ body.has-mini-player .app-main {
   font-size: 1.15rem;
   font-weight: 700;
   margin-bottom: 16px;
+}
+
+.section-subtitle {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
 }
 
 /* --------------------------------------------------
@@ -930,59 +1032,88 @@ body.audio-playing .track-item.playing .track-cover-small {
   font-variant-numeric: tabular-nums;
 }
 
+/* la rappresentazione visiva è ora il canvas della waveform sotto:
+   l'input range resta solo per drag/tastiera/accessibilità, quindi il
+   suo track nativo è trasparente (thumb visibile ma minimale, utile
+   come riferimento preciso mentre si trascina) */
+.seek-wrap {
+  position: relative;
+  flex: 1;
+  height: 28px;
+  display: flex;
+  align-items: center;
+}
+
+.waveform-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
 .seek-bar {
   --progress: 0%;
-  flex: 1;
+  position: relative;
+  z-index: 2;
+  width: 100%;
   -webkit-appearance: none;
   appearance: none;
-  height: 4px;
+  height: 100%;
   background: transparent;
-  border-radius: 999px;
   outline: none;
   cursor: pointer;
 }
 
 .seek-bar::-webkit-slider-runnable-track {
-  height: 4px;
-  border-radius: 999px;
-  background: linear-gradient(to right, var(--accent) var(--progress), var(--bg-surface-3) var(--progress));
+  height: 100%;
+  background: transparent;
 }
 
 .seek-bar::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 13px;
-  height: 13px;
-  margin-top: -4.5px;
-  border-radius: 50%;
+  width: 3px;
+  height: 22px;
+  margin-top: 3px;
+  border-radius: 2px;
   background: #fff;
-  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
   cursor: pointer;
   transition: transform 0.15s ease;
 }
 
 .seek-bar::-webkit-slider-thumb:hover {
-  transform: scale(1.15);
+  transform: scaleX(1.6);
 }
 
 .seek-bar::-moz-range-track {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--bg-surface-3);
+  height: 100%;
+  background: transparent;
+  border: none;
 }
 
 .seek-bar::-moz-range-progress {
-  height: 4px;
-  border-radius: 999px;
-  background: var(--accent);
+  height: 100%;
+  background: transparent;
 }
 
 .seek-bar::-moz-range-thumb {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
+  width: 3px;
+  height: 22px;
+  border-radius: 2px;
   background: #fff;
-  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.3);
+  border: none;
   cursor: pointer;
+}
+
+/* --------------------------------------------------
+   VISUALIZER AUDIO (barre di frequenza in tempo reale)
+-------------------------------------------------- */
+.audio-visualizer {
+  display: block;
+  width: 100%;
+  height: 56px;
+  margin-bottom: 10px;
 }
 
 .player-controls-row {
@@ -991,6 +1122,46 @@ body.audio-playing .track-item.playing .track-cover-small {
   justify-content: center;
   gap: 10px;
   margin-bottom: 8px;
+}
+
+/* --------------------------------------------------
+   REAZIONI RAPIDE (sul brano in riproduzione)
+-------------------------------------------------- */
+.track-reactions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.reaction-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 5px 11px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+}
+
+.reaction-chip:hover {
+  background: var(--bg-surface-3);
+  transform: translateY(-1px);
+}
+
+.reaction-chip.mine {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.reaction-chip-count {
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 8px;
 }
 
 .control-btn {
@@ -1230,18 +1401,25 @@ body.audio-playing .track-item.playing .track-cover-small {
 .playlist-item-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  flex-wrap: wrap;
+  gap: 6px 10px;
   cursor: pointer;
 }
 
+/* nome per intero, mai troncato: va a capo (fino a 2 righe) invece del
+   vecchio ellipsis su una riga sola, che tagliava i titoli più lunghi.
+   flex-basis dà al nome un minimo di spazio prima che le azioni vadano
+   a capo sotto di lui, restando comunque responsive su schermi stretti. */
 .playlist-name {
   font-size: 0.9rem;
   font-weight: 600;
-  flex: 1;
+  flex: 1 1 140px;
   min-width: 0;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .inline-rename-input {
@@ -1263,11 +1441,14 @@ body.audio-playing .track-item.playing .track-cover-small {
 .playlist-count {
   font-size: 0.75rem;
   color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .playlist-actions {
   display: flex;
   gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .playlist-tracks {
@@ -1277,6 +1458,109 @@ body.audio-playing .track-item.playing .track-cover-small {
 
 .playlist-tracks.open {
   display: block;
+}
+
+/* --------------------------------------------------
+   ADMIN: dashboard statistiche
+-------------------------------------------------- */
+.admin-stats-panel {
+  margin-bottom: 30px;
+}
+
+.stats-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 22px;
+}
+
+.stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.stats-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 22px;
+}
+
+.stat-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.stat-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: 0.82rem;
+}
+
+.stat-list .stat-list-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stat-list .stat-list-value {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-empty {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding: 8px 10px;
+}
+
+.stat-bar-chart {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 90px;
+  padding: 8px 0;
+}
+
+.stat-bar {
+  flex: 1;
+  min-width: 2px;
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  border-radius: 2px 2px 0 0;
+}
+
+@media (max-width: 640px) {
+  .stats-cards {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .stats-columns {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* --------------------------------------------------
@@ -1503,6 +1787,75 @@ body.audio-playing .track-item.playing .track-cover-small {
   padding-right: 6px;
 }
 
+/* --------------------------------------------------
+   SKELETON LOADER (primo caricamento libreria)
+-------------------------------------------------- */
+.tracks-skeleton {
+  list-style: none;
+  margin-top: 8px;
+}
+
+.skeleton-track-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skeleton-block {
+  border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--bg-surface-2) 25%, var(--bg-surface-3) 50%, var(--bg-surface-2) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+
+.skeleton-cover {
+  width: 52px;
+  height: 52px;
+  flex-shrink: 0;
+}
+
+.skeleton-line-title {
+  height: 12px;
+  width: 55%;
+}
+
+.skeleton-line-sub {
+  height: 10px;
+  width: 32%;
+}
+
+.skeleton-track-item:nth-child(2) .skeleton-block { animation-delay: 0.08s; }
+.skeleton-track-item:nth-child(3) .skeleton-block { animation-delay: 0.16s; }
+.skeleton-track-item:nth-child(4) .skeleton-block { animation-delay: 0.24s; }
+.skeleton-track-item:nth-child(5) .skeleton-block { animation-delay: 0.32s; }
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block {
+    animation: none;
+  }
+}
+
 .track-item {
   display: flex;
   flex-direction: column;
@@ -1588,12 +1941,6 @@ body.audio-playing .track-item.playing .track-cover-small {
   .brand {
     flex-shrink: 0;
     font-size: 0.88rem;
-  }
-
-  .logout-btn {
-    flex-shrink: 0;
-    padding: 8px 10px;
-    font-size: 0.8rem;
   }
 
   .app-main {
@@ -1697,10 +2044,6 @@ body.audio-playing .track-item.playing .track-cover-small {
        ancorata a destra (si apre verso sinistra), con un tetto di
        larghezza per non sforare mai lo schermo */
     max-width: calc(100vw - 40px);
-  }
-
-  .playlist-item-row {
-    flex-wrap: wrap;
   }
 
   .playlist-count {

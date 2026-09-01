@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.6.8";
+const APP_VERSION = "1.9.0";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -189,7 +189,24 @@ if (isAuthPage) {
     loginError.textContent = "La tua registrazione non è stata approvata.";
   }
 
-  loginBtn?.addEventListener("click", async () => {
+  // disabilita il bottone e mostra uno spinner + testo di caricamento
+  // durante le chiamate async, così login/registrazione/recupero non
+  // sembrano "non aver fatto nulla" mentre aspettano Supabase
+  function setButtonLoading(btn, loading, loadingText) {
+    if (loading) {
+      btn.dataset.originalText = btn.textContent;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="btn-spinner" aria-hidden="true"></span>${loadingText}`;
+    } else {
+      btn.disabled = false;
+      btn.textContent = btn.dataset.originalText || btn.textContent;
+    }
+  }
+
+  // <form>: il submit scatta sia col click sul bottone sia con Invio
+  // da dentro un input, senza bisogno di gestirlo a mano per ciascuno
+  loginForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
     loginError.textContent = "";
     const email = loginEmail.value.trim();
     const password = loginPassword.value.trim();
@@ -198,11 +215,14 @@ if (isAuthPage) {
       return;
     }
 
+    setButtonLoading(loginBtn, true, "Accesso in corso...");
+
     const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
     if (error) {
+      setButtonLoading(loginBtn, false);
       loginError.textContent = error.message || "Errore di login.";
       return;
     }
@@ -210,6 +230,7 @@ if (isAuthPage) {
     const profile = await fetchOwnProfileStatus(data.user.id);
     if (!profile.is_admin && profile.status !== "approved") {
       await supabase.auth.signOut();
+      setButtonLoading(loginBtn, false);
       loginError.textContent =
         profile.status === "rejected"
           ? "La tua registrazione non è stata approvata."
@@ -223,7 +244,8 @@ if (isAuthPage) {
     window.location.href = "app.html";
   });
 
-  registerBtn?.addEventListener("click", async () => {
+  registerForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
     registerError.textContent = "";
     const email = registerEmail.value.trim();
     const password = registerPassword.value.trim();
@@ -242,10 +264,13 @@ if (isAuthPage) {
       return;
     }
 
+    setButtonLoading(registerBtn, true, "Verifica in corso...");
+
     const { data: existingStatus } = await supabase.rpc("check_registration_email", {
       check_email: email,
     });
     if (existingStatus) {
+      setButtonLoading(registerBtn, false);
       registerError.textContent =
         existingStatus === "pending"
           ? "Esiste già una registrazione in attesa di approvazione con questa email."
@@ -255,6 +280,8 @@ if (isAuthPage) {
       return;
     }
 
+    setButtonLoading(registerBtn, true, "Creazione account...");
+
     const { error } = await supabase.auth.signUp({
       email,
       password,
@@ -263,6 +290,7 @@ if (isAuthPage) {
       },
     });
     if (error) {
+      setButtonLoading(registerBtn, false);
       registerError.textContent = error.message || "Errore di registrazione.";
       return;
     }
@@ -271,13 +299,15 @@ if (isAuthPage) {
     // l'approvazione di un admin prima di poter accedere
     await supabase.auth.signOut();
 
+    setButtonLoading(registerBtn, false);
     registerForm.querySelectorAll("input").forEach((input) => (input.value = ""));
     registerError.style.color = "var(--success)";
     registerError.textContent =
       "Registrazione inviata! Il tuo account è in attesa di approvazione da parte di un amministratore.";
   });
 
-  forgotBtn?.addEventListener("click", async () => {
+  forgotForm?.addEventListener("submit", async (e) => {
+    e.preventDefault();
     forgotError.textContent = "";
     const email = forgotEmail.value.trim();
     if (!email) {
@@ -285,9 +315,14 @@ if (isAuthPage) {
       return;
     }
 
+    setButtonLoading(forgotBtn, true, "Invio in corso...");
+
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: new URL("reset-password.html", window.location.href).toString(),
     });
+
+    setButtonLoading(forgotBtn, false);
+
     if (error) {
       forgotError.textContent = error.message || "Errore durante l'invio dell'email.";
       return;
@@ -386,16 +421,26 @@ if (isAppPage) {
   const logoutBtn = document.getElementById("logout-btn");
   const exitBtn = document.getElementById("exit-btn");
   const changePasswordBtn = document.getElementById("change-password-btn");
+  const accountMenu = document.querySelector(".account-menu");
+  const accountMenuBtn = document.getElementById("account-menu-btn");
+  const accountMenuDropdown = document.getElementById("account-menu-dropdown");
   const adminNavTab = document.getElementById("admin-nav-tab");
   const adminNavTabMobile = document.getElementById("admin-nav-tab-mobile");
   const adminPendingBadge = document.getElementById("admin-pending-badge");
   const adminPendingList = document.getElementById("admin-pending-list");
   const adminPendingEmpty = document.getElementById("admin-pending-empty");
   const adminUsersList = document.getElementById("admin-users-list");
+  const statTotalTracks = document.getElementById("stat-total-tracks");
+  const statTotalPlays = document.getElementById("stat-total-plays");
+  const statTotalUsers = document.getElementById("stat-total-users");
+  const statTopTracks = document.getElementById("stat-top-tracks");
+  const statTopUploaders = document.getElementById("stat-top-uploaders");
+  const statPlaysChart = document.getElementById("stat-plays-chart");
   const fileInput = document.getElementById("file-input");
   const uploadBtn = document.getElementById("upload-btn");
   const uploadStatus = document.getElementById("upload-status");
   const tracksList = document.getElementById("tracks-list");
+  const tracksSkeleton = document.getElementById("tracks-skeleton");
   const emptyMessage = document.getElementById("empty-message");
   const audioPlayer = document.getElementById("audio-player");
   const currentTrackName = document.getElementById("current-track-name");
@@ -409,6 +454,8 @@ if (isAppPage) {
   const playlistsList = document.getElementById("playlists-list");
   const playlistsSearchInput = document.getElementById("playlists-search-input");
   const playlistsEmptyMessage = document.getElementById("playlists-empty-message");
+  const smartPlaylistsPanel = document.getElementById("smart-playlists-panel");
+  const smartPlaylistsList = document.getElementById("smart-playlists-list");
   const newAlbumName = document.getElementById("new-album-name");
   const newAlbumBtn = document.getElementById("new-album-btn");
   const albumsList = document.getElementById("albums-list");
@@ -441,6 +488,10 @@ if (isAppPage) {
   const seekBar = document.getElementById("seek-bar");
   const currentTimeLabel = document.getElementById("current-time");
   const durationLabel = document.getElementById("duration-time");
+  const waveformCanvas = document.getElementById("waveform-canvas");
+  const waveformCtx = waveformCanvas?.getContext("2d");
+  const audioVisualizerCanvas = document.getElementById("audio-visualizer");
+  const audioVisualizerCtx = audioVisualizerCanvas?.getContext("2d");
 
   const miniPlayer = document.getElementById("mini-player");
   const miniCover = document.getElementById("mini-cover");
@@ -451,6 +502,7 @@ if (isAppPage) {
   const fullPlayer = document.getElementById("full-player");
   const fullPlayerBackdrop = document.getElementById("full-player-backdrop");
   const collapsePlayerBtn = document.getElementById("collapse-player-btn");
+  const trackReactionsEl = document.getElementById("track-reactions");
 
   /* STATE */
   let currentUser = null;
@@ -463,6 +515,9 @@ if (isAppPage) {
   let albumTracksMap = {}; // albumId -> [trackId, ...]
   let favoriteTrackIds = new Set(); // preferiti PERSONALI dell'utente loggato
   let userPlayStats = {}; // trackId -> { count, lastPlayedAt } PERSONALI dell'utente loggato
+  let reactionCountsByTrack = {}; // trackId -> { emoji: count } di TUTTI gli utenti
+  let myReactionsByTrack = {}; // trackId -> Set(emoji) SOLO dell'utente loggato
+  const REACTION_EMOJIS = ["🔥", "❤️", "😂", "👏", "🤯"];
   let currentView = "library"; // "library" | "favorites" | "history" | "artists" (sotto-viste della pagina Libreria)
   let searchTerm = "";
   let albumSearchTerm = "";
@@ -731,6 +786,81 @@ if (isAppPage) {
     others.forEach((p) => adminUsersList.appendChild(renderAdminUserRow(p, { showActions: false })));
 
     await refreshAdminPendingBadge();
+    await loadAdminStats();
+  }
+
+  /* ============================================================
+     ADMIN: dashboard statistiche
+     track_plays ha RLS che limita la select alle proprie righe:
+     l'aggregazione su tutti gli utenti passa dalla RPC
+     admin_get_stats(), che fa lei stessa il check is_admin invece
+     di affidarsi alla RLS (security definer).
+  ============================================================ */
+  async function loadAdminStats() {
+    if (!isAdmin || !statTotalTracks) return;
+    const { data, error } = await supabase.rpc("admin_get_stats");
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    statTotalTracks.textContent = data.total_tracks ?? "–";
+    statTotalPlays.textContent = data.total_plays ?? "–";
+    statTotalUsers.textContent = data.total_users ?? "–";
+
+    renderStatList(statTopTracks, data.top_tracks, (row) => ({
+      name: row.artist ? `${row.title} — ${row.artist}` : row.title,
+      value: `${row.play_count} ▶`,
+    }));
+
+    renderStatList(statTopUploaders, data.top_uploaders, (row) => ({
+      name: row.email,
+      value: `${row.track_count} brani`,
+    }));
+
+    renderStatBarChart(data.plays_last_30_days || []);
+  }
+
+  function renderStatList(listEl, rows, mapRow) {
+    if (!listEl) return;
+    listEl.innerHTML = "";
+    if (!rows || !rows.length) {
+      const li = document.createElement("li");
+      li.className = "stat-empty";
+      li.textContent = "Ancora nessun dato.";
+      listEl.appendChild(li);
+      return;
+    }
+    rows.forEach((row) => {
+      const { name, value } = mapRow(row);
+      const li = document.createElement("li");
+      const nameSpan = document.createElement("span");
+      nameSpan.className = "stat-list-name";
+      nameSpan.textContent = name;
+      const valueSpan = document.createElement("span");
+      valueSpan.className = "stat-list-value";
+      valueSpan.textContent = value;
+      li.appendChild(nameSpan);
+      li.appendChild(valueSpan);
+      listEl.appendChild(li);
+    });
+  }
+
+  function renderStatBarChart(days) {
+    if (!statPlaysChart) return;
+    statPlaysChart.innerHTML = "";
+    if (!days.length) {
+      statPlaysChart.innerHTML = '<p class="stat-empty">Ancora nessun ascolto negli ultimi 30 giorni.</p>';
+      return;
+    }
+    const maxPlays = Math.max(...days.map((d) => d.plays), 1);
+    days.forEach((d) => {
+      const bar = document.createElement("div");
+      bar.className = "stat-bar";
+      bar.style.height = `${Math.max((d.plays / maxPlays) * 100, 4)}%`;
+      bar.title = `${d.day}: ${d.plays} ascolti`;
+      statPlaysChart.appendChild(bar);
+    });
   }
 
   /* ============================================================
@@ -746,13 +876,44 @@ if (isAppPage) {
       refreshTimer = setTimeout(() => loadData(), 600);
     };
 
-    const tables = ["tracks", "playlists", "playlist_tracks", "albums", "album_tracks"];
+    const tables = ["tracks", "playlists", "playlist_tracks", "albums", "album_tracks", "track_reactions"];
     let channel = supabase.channel("fioxify-shared-library");
     tables.forEach((table) => {
       channel = channel.on("postgres_changes", { event: "*", schema: "public", table }, scheduleRefresh);
     });
     channel.subscribe();
   }
+
+  /* MENU ACCOUNT (tendina con Cambia password / Esci / Logout) */
+  function closeAccountMenu() {
+    accountMenuDropdown.hidden = true;
+    accountMenu?.classList.remove("open");
+    accountMenuBtn?.setAttribute("aria-expanded", "false");
+  }
+
+  accountMenuBtn?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = accountMenuDropdown.hidden;
+    if (willOpen) {
+      accountMenuDropdown.hidden = false;
+      accountMenu?.classList.add("open");
+      accountMenuBtn.setAttribute("aria-expanded", "true");
+    } else {
+      closeAccountMenu();
+    }
+  });
+
+  accountMenuDropdown?.addEventListener("click", (e) => {
+    if (e.target.closest(".account-menu-item")) closeAccountMenu();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!accountMenuDropdown.hidden && !accountMenu.contains(e.target)) closeAccountMenu();
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !accountMenuDropdown.hidden) closeAccountMenu();
+  });
 
   /* LOGOUT */
   logoutBtn?.addEventListener("click", async () => {
@@ -1037,6 +1198,7 @@ if (isAppPage) {
       { data: profileRows },
       { data: favoriteRows },
       { data: playRows },
+      { data: reactionRows },
     ] = await Promise.all([
       supabase.from("tracks").select("*").order("created_at", { ascending: false }),
       supabase.from("playlists").select("*").order("created_at", { ascending: false }),
@@ -1046,6 +1208,7 @@ if (isAppPage) {
       supabase.rpc("list_profile_emails"),
       supabase.from("track_favorites").select("track_id").eq("user_id", currentUser.id),
       supabase.from("track_plays").select("track_id, played_at").eq("user_id", currentUser.id),
+      supabase.from("track_reactions").select("track_id, user_id, emoji"),
     ]);
 
     if (trackErr) {
@@ -1085,11 +1248,29 @@ if (isAppPage) {
       userPlayStats[row.track_id] = stat;
     });
 
+    reactionCountsByTrack = {};
+    myReactionsByTrack = {};
+    (reactionRows || []).forEach((row) => {
+      const counts = reactionCountsByTrack[row.track_id] || {};
+      counts[row.emoji] = (counts[row.emoji] || 0) + 1;
+      reactionCountsByTrack[row.track_id] = counts;
+      if (row.user_id === currentUser.id) {
+        if (!myReactionsByTrack[row.track_id]) myReactionsByTrack[row.track_id] = new Set();
+        myReactionsByTrack[row.track_id].add(row.emoji);
+      }
+    });
+    if (nowPlayingId) renderTrackReactions(nowPlayingId);
+
     // libreria, album e playlist sono ora sezioni indipendenti (non più
     // sotto-viste esclusive), quindi vanno tenute fresche tutte insieme
     render();
     renderPlaylists();
     renderAlbums();
+
+    // skeleton solo per il primissimo caricamento: una volta arrivati i
+    // dati reali (anche vuoti) non serve più, questa chiamata dopo un
+    // hide precedente è un no-op innocuo
+    if (tracksSkeleton) tracksSkeleton.hidden = true;
   }
 
   /* ============================================================
@@ -1977,7 +2158,71 @@ if (isAppPage) {
     }
   }
 
+  /* ============================================================
+     PLAYLIST SMART (calcolate al volo, non salvate su DB)
+     "Aggiunti di recente" e "Più ascoltati": bastano i dati che
+     l'app ha già in memoria (allTracks arriva ordinato per
+     created_at desc dal DB; userPlayStats tiene i conteggi
+     dell'utente corrente), niente da persistere né sincronizzare.
+  ============================================================ */
+  function buildSmartPlaylists() {
+    const recent = allTracks.slice(0, 20);
+
+    const mostPlayed = allTracks
+      .filter((t) => (userPlayStats[t.id]?.count || 0) > 0)
+      .sort((a, b) => (userPlayStats[b.id]?.count || 0) - (userPlayStats[a.id]?.count || 0))
+      .slice(0, 20);
+
+    const lists = [];
+    if (recent.length) lists.push({ id: "smart-recent", name: "🕐 Aggiunti di recente", tracks: recent });
+    if (mostPlayed.length) lists.push({ id: "smart-most-played", name: "🔥 Più ascoltati", tracks: mostPlayed });
+    return lists;
+  }
+
+  function renderSmartPlaylists() {
+    if (!smartPlaylistsPanel || !smartPlaylistsList) return;
+    const lists = buildSmartPlaylists();
+    smartPlaylistsPanel.hidden = lists.length === 0;
+    smartPlaylistsList.innerHTML = "";
+
+    lists.forEach((sp) => {
+      const li = document.createElement("li");
+      li.className = "playlist-item";
+
+      const row = document.createElement("div");
+      row.className = "playlist-item-row";
+
+      const name = document.createElement("span");
+      name.className = "playlist-name";
+      name.textContent = sp.name;
+      row.appendChild(name);
+
+      const count = document.createElement("span");
+      count.className = "playlist-count";
+      count.textContent = `${sp.tracks.length} brani`;
+      row.appendChild(count);
+
+      const actions = document.createElement("div");
+      actions.className = "playlist-actions";
+
+      const playBtn = document.createElement("button");
+      playBtn.className = "icon-btn";
+      playBtn.textContent = "▶";
+      playBtn.title = "Riproduci";
+      playBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        play(sp.tracks[0], sp.tracks);
+      });
+      actions.appendChild(playBtn);
+      row.appendChild(actions);
+
+      li.appendChild(row);
+      smartPlaylistsList.appendChild(li);
+    });
+  }
+
   function renderPlaylists() {
+    renderSmartPlaylists();
     playlistsList.innerHTML = "";
 
     const term = playlistSearchTerm.trim().toLowerCase();
@@ -2417,9 +2662,329 @@ if (isAppPage) {
   }
 
   /* ============================================================
+     SFONDO AMBIENT (colore dominante estratto dalla cover art)
+     Le cover sono già data URI (immagine di default o tag ID3 letto
+     in upload), quindi niente problemi di canvas "tainted" da CORS.
+  ============================================================ */
+  const ambientColorCache = new Map(); // cover url -> "r, g, b"
+
+  function extractDominantColor(imageUrl) {
+    if (ambientColorCache.has(imageUrl)) return Promise.resolve(ambientColorCache.get(imageUrl));
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const size = 24; // downsample: basta la tendenza di colore, non il dettaglio
+          const canvas = document.createElement("canvas");
+          canvas.width = size;
+          canvas.height = size;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, size, size);
+          const { data } = ctx.getImageData(0, 0, size, size);
+          let r = 0, g = 0, b = 0, count = 0;
+          for (let i = 0; i < data.length; i += 4) {
+            r += data[i];
+            g += data[i + 1];
+            b += data[i + 2];
+            count++;
+          }
+          const rgb = `${Math.round(r / count)}, ${Math.round(g / count)}, ${Math.round(b / count)}`;
+          ambientColorCache.set(imageUrl, rgb);
+          resolve(rgb);
+        } catch (err) {
+          resolve(null);
+        }
+      };
+      img.onerror = () => resolve(null);
+      img.src = imageUrl;
+    });
+  }
+
+  function applyAmbientBackdrop(coverUrl, trackId) {
+    extractDominantColor(coverUrl).then((rgb) => {
+      // il brano potrebbe essere già cambiato mentre l'estrazione era in corso
+      if (!fullPlayerBackdrop || nowPlayingId !== trackId) return;
+      fullPlayerBackdrop.style.backgroundImage = rgb
+        ? `radial-gradient(circle at 28% 18%, rgba(${rgb}, 0.85) 0%, transparent 62%), url("${coverUrl}")`
+        : `url("${coverUrl}")`;
+    });
+  }
+
+  /* ============================================================
+     WEB AUDIO CONDIVISA (visualizer + decodifica per la waveform)
+     createMediaElementSource si può chiamare una sola volta per
+     l'intera vita dell'elemento <audio>: va creata lazy al primo
+     play (richiede comunque un gesto utente) e riusata sempre,
+     instradando sorgente -> analyser -> uscita così l'audio continua
+     a sentirsi normalmente.
+  ============================================================ */
+  let sharedAudioCtx = null;
+  let audioAnalyser = null;
+
+  function getAudioAnalyser() {
+    if (audioAnalyser) return audioAnalyser;
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      sharedAudioCtx = new Ctx();
+      const source = sharedAudioCtx.createMediaElementSource(audioPlayer);
+      audioAnalyser = sharedAudioCtx.createAnalyser();
+      audioAnalyser.fftSize = 128;
+      audioAnalyser.smoothingTimeConstant = 0.75;
+      source.connect(audioAnalyser);
+      audioAnalyser.connect(sharedAudioCtx.destination);
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+    return audioAnalyser;
+  }
+
+  const accentColor = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim() || "#3b82f6";
+  const accent2Color = getComputedStyle(document.documentElement).getPropertyValue("--accent-2").trim() || "#38bdf8";
+
+  let visualizerRAF = null;
+  function drawVisualizerFrame() {
+    const analyser = audioAnalyser;
+    if (!analyser || !audioVisualizerCtx || !audioVisualizerCanvas) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    const width = audioVisualizerCanvas.clientWidth;
+    const height = audioVisualizerCanvas.clientHeight;
+    if (width && (audioVisualizerCanvas.width !== width * dpr || audioVisualizerCanvas.height !== height * dpr)) {
+      audioVisualizerCanvas.width = width * dpr;
+      audioVisualizerCanvas.height = height * dpr;
+    }
+    audioVisualizerCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    audioVisualizerCtx.clearRect(0, 0, width, height);
+
+    const bufferLength = analyser.frequencyBinCount;
+    const data = new Uint8Array(bufferLength);
+    analyser.getByteFrequencyData(data);
+
+    const barCount = Math.min(bufferLength, 48);
+    const gap = 3;
+    const barWidth = Math.max((width - gap * (barCount - 1)) / barCount, 1);
+    const gradient = audioVisualizerCtx.createLinearGradient(0, height, 0, 0);
+    gradient.addColorStop(0, accentColor);
+    gradient.addColorStop(1, accent2Color);
+    audioVisualizerCtx.fillStyle = gradient;
+
+    for (let i = 0; i < barCount; i++) {
+      const value = data[i] / 255;
+      const barHeight = Math.max(value * height, 2);
+      const x = i * (barWidth + gap);
+      audioVisualizerCtx.beginPath();
+      const r = Math.min(barWidth / 2, 3);
+      const y = height - barHeight;
+      audioVisualizerCtx.roundRect ? audioVisualizerCtx.roundRect(x, y, barWidth, barHeight, r) : audioVisualizerCtx.rect(x, y, barWidth, barHeight);
+      audioVisualizerCtx.fill();
+    }
+
+    visualizerRAF = requestAnimationFrame(drawVisualizerFrame);
+  }
+
+  function startVisualizer() {
+    const analyser = getAudioAnalyser();
+    if (!analyser) return;
+    if (sharedAudioCtx.state === "suspended") sharedAudioCtx.resume();
+    if (visualizerRAF) cancelAnimationFrame(visualizerRAF);
+    drawVisualizerFrame();
+  }
+
+  function stopVisualizer() {
+    if (visualizerRAF) cancelAnimationFrame(visualizerRAF);
+    visualizerRAF = null;
+    if (audioVisualizerCtx && audioVisualizerCanvas) {
+      audioVisualizerCtx.clearRect(0, 0, audioVisualizerCanvas.width, audioVisualizerCanvas.height);
+    }
+  }
+
+  /* ============================================================
+     SEEKBAR A FORMA D'ONDA
+     Riusa il blob audio già scaricato per la cache (vedi
+     getTrackAudioBlob) per decodificarlo ed estrarne i picchi:
+     nessun download aggiuntivo. La parte già ascoltata viene
+     ridisegnata in accent invece della vecchia barra piatta.
+  ============================================================ */
+  const waveformPeaksCache = new Map(); // storage_path -> Float32Array
+  let currentWaveformPeaks = null;
+
+  async function extractWaveformPeaks(storagePath, blob) {
+    if (waveformPeaksCache.has(storagePath)) return waveformPeaksCache.get(storagePath);
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = sharedAudioCtx || new Ctx();
+      const arrayBuffer = await blob.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      const raw = audioBuffer.getChannelData(0);
+      const buckets = 120;
+      const bucketSize = Math.max(Math.floor(raw.length / buckets), 1);
+      const peaks = new Float32Array(buckets);
+      for (let i = 0; i < buckets; i++) {
+        let max = 0;
+        const start = i * bucketSize;
+        const end = Math.min(start + bucketSize, raw.length);
+        for (let j = start; j < end; j++) {
+          const v = Math.abs(raw[j]);
+          if (v > max) max = v;
+        }
+        peaks[i] = max;
+      }
+      const globalMax = Math.max(...peaks, 0.01);
+      for (let i = 0; i < buckets; i++) peaks[i] = Math.max(peaks[i] / globalMax, 0.06);
+      waveformPeaksCache.set(storagePath, peaks);
+      return peaks;
+    } catch (err) {
+      console.error(err);
+      return null;
+    }
+  }
+
+  function drawWaveform(progressRatio) {
+    if (!waveformCtx || !waveformCanvas) return;
+    const dpr = window.devicePixelRatio || 1;
+    const width = waveformCanvas.clientWidth;
+    const height = waveformCanvas.clientHeight;
+    if (!width || !height) return;
+    if (waveformCanvas.width !== width * dpr || waveformCanvas.height !== height * dpr) {
+      waveformCanvas.width = width * dpr;
+      waveformCanvas.height = height * dpr;
+    }
+    waveformCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    waveformCtx.clearRect(0, 0, width, height);
+
+    const peaks = currentWaveformPeaks;
+    if (!peaks) return;
+
+    const barCount = peaks.length;
+    const gap = 2;
+    const barWidth = Math.max((width - gap * (barCount - 1)) / barCount, 1);
+    const playedBars = Math.floor((progressRatio || 0) * barCount);
+
+    for (let i = 0; i < barCount; i++) {
+      const barHeight = Math.max(peaks[i] * height, 2);
+      const x = i * (barWidth + gap);
+      const y = (height - barHeight) / 2;
+      waveformCtx.fillStyle = i < playedBars ? accentColor : "rgba(154, 161, 176, 0.35)";
+      waveformCtx.fillRect(x, y, barWidth, barHeight);
+    }
+  }
+
+  let lastSeekProgressRatio = 0;
+  window.addEventListener("resize", () => drawWaveform(lastSeekProgressRatio));
+
+  /* ============================================================
+     CROSSFADE
+     Negli ultimi CROSSFADE_SECONDS del brano corrente, il prossimo
+     parte in sordina su un secondo <audio> e si sovrappone mentre
+     quello attuale sfuma: una vera dissolvenza incrociata, non un
+     semplice fade-out. Al termine il controllo torna al player
+     principale (così tutta la UI esistente - seekbar, waveform,
+     visualizer - continua a funzionare senza doverla duplicare).
+  ============================================================ */
+  const audioPlayerCrossfade = document.getElementById("audio-player-crossfade");
+  const CROSSFADE_SECONDS = 5;
+  let isCrossfading = false;
+  let crossfadeRAF = null;
+
+  function seekWhenReady(el, time) {
+    if (el.readyState >= 1) el.currentTime = time;
+    else el.addEventListener("loadedmetadata", () => (el.currentTime = time), { once: true });
+  }
+
+  function cancelCrossfade() {
+    if (!isCrossfading && !audioPlayerCrossfade.src) return;
+    isCrossfading = false;
+    if (crossfadeRAF) cancelAnimationFrame(crossfadeRAF);
+    crossfadeRAF = null;
+    audioPlayerCrossfade.pause();
+    audioPlayerCrossfade.removeAttribute("src");
+    audioPlayer.volume = 1;
+  }
+
+  async function maybeStartCrossfade() {
+    if (isCrossfading) return;
+    if (repeatMode === "one") return;
+    if (!audioPlayer.duration || !isFinite(audioPlayer.duration)) return;
+    const remaining = audioPlayer.duration - audioPlayer.currentTime;
+    if (remaining > CROSSFADE_SECONDS || remaining <= 0.15) return;
+
+    const nextIndex = pickNextIndex();
+    if (nextIndex < 0) return;
+    const nextTrack = currentQueue[nextIndex];
+    if (!nextTrack) return;
+
+    isCrossfading = true;
+    try {
+      const nextUrl = await getTrackAudioUrl(nextTrack.storage_path);
+      if (!nextUrl || !isCrossfading) return; // annullato nel frattempo (utente ha navigato a mano)
+      const blob = await getTrackAudioBlob(nextTrack.storage_path, nextUrl);
+      if (!isCrossfading) return;
+
+      const objectUrl = URL.createObjectURL(blob);
+      audioPlayerCrossfade.src = objectUrl;
+      audioPlayerCrossfade.volume = 0;
+      await audioPlayerCrossfade.play();
+
+      const fadeDurationMs = Math.max(Math.min(CROSSFADE_SECONDS, remaining), 0.5) * 1000;
+      const startTime = performance.now();
+      const startVolumeOut = audioPlayer.volume;
+
+      const step = (now) => {
+        if (!isCrossfading) return;
+        const t = Math.min((now - startTime) / fadeDurationMs, 1);
+        audioPlayer.volume = startVolumeOut * (1 - t);
+        audioPlayerCrossfade.volume = t;
+        if (t < 1) {
+          crossfadeRAF = requestAnimationFrame(step);
+        } else {
+          finishCrossfade(nextTrack, nextIndex, objectUrl, blob);
+        }
+      };
+      crossfadeRAF = requestAnimationFrame(step);
+    } catch (err) {
+      console.error(err);
+      isCrossfading = false;
+    }
+  }
+
+  function finishCrossfade(nextTrack, nextIndex, objectUrl, blob) {
+    if (crossfadeRAF) cancelAnimationFrame(crossfadeRAF);
+    crossfadeRAF = null;
+
+    const resumeTime = audioPlayerCrossfade.currentTime;
+    audioPlayerCrossfade.pause();
+    audioPlayerCrossfade.removeAttribute("src");
+
+    currentIndex = nextIndex;
+    if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
+    currentObjectUrl = objectUrl;
+    audioPlayer.src = objectUrl;
+    audioPlayer.volume = 1;
+    seekWhenReady(audioPlayer, resumeTime);
+    audioPlayer.play();
+
+    currentWaveformPeaks = waveformPeaksCache.get(nextTrack.storage_path) || null;
+    drawWaveform(lastSeekProgressRatio);
+    if (!currentWaveformPeaks) {
+      extractWaveformPeaks(nextTrack.storage_path, blob).then((peaks) => {
+        if (nowPlayingId !== nextTrack.id) return;
+        currentWaveformPeaks = peaks;
+        drawWaveform(lastSeekProgressRatio);
+      });
+    }
+
+    applyNowPlayingUI(nextTrack);
+    registerPlay(nextTrack);
+
+    isCrossfading = false;
+  }
+
+  /* ============================================================
      PLAYER: PLAY / CODA / SHUFFLE / REPEAT
   ============================================================ */
   async function play(track, queueList) {
+    cancelCrossfade();
     currentQueue = queueList.slice();
     currentIndex = currentQueue.findIndex((t) => t.id === track.id);
 
@@ -2429,41 +2994,129 @@ if (isAppPage) {
       return;
     }
 
+    // creata qui (dentro un gesto utente: click su un brano) cosicché
+    // sia già pronta per il visualizer e riusabile per decodificare la waveform
+    getAudioAnalyser();
+
+    currentWaveformPeaks = null;
+    drawWaveform(0);
+
     try {
       const blob = await getTrackAudioBlob(track.storage_path, audioUrl);
       if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
       currentObjectUrl = URL.createObjectURL(blob);
       audioPlayer.src = currentObjectUrl;
+
+      extractWaveformPeaks(track.storage_path, blob).then((peaks) => {
+        if (nowPlayingId !== track.id) return; // brano già cambiato nel frattempo
+        currentWaveformPeaks = peaks;
+        drawWaveform(lastSeekProgressRatio);
+      });
     } catch (err) {
       console.error(err);
       audioPlayer.src = audioUrl; // fallback diretto se fetch/cache manuale fallisce
     }
+    audioPlayer.volume = 1;
     audioPlayer.play();
 
     seekBar.value = 0;
     seekBar.max = 0;
     seekBar.style.setProperty("--progress", "0%");
+    lastSeekProgressRatio = 0;
     if (miniProgressFill) miniProgressFill.style.width = "0%";
     currentTimeLabel.textContent = "0:00";
     durationLabel.textContent = "0:00";
 
+    applyNowPlayingUI(track);
+    registerPlay(track);
+  }
+
+  // stato/UI del "brano in riproduzione": estratto da play() così il
+  // crossfade può aggiornarlo al termine della dissolvenza senza dover
+  // rifare fetch/decodifica di un audio già in riproduzione sul layer
+  // di crossfade
+  function applyNowPlayingUI(track) {
     const metaLine = [track.artist, track.album].filter(Boolean).join(" — ");
 
     nowPlayingId = track.id;
     currentTrackName.textContent = track.title;
     currentTrackArtist.textContent = metaLine;
     currentCover.src = track.cover || DEFAULT_COVER;
-    if (fullPlayerBackdrop) fullPlayerBackdrop.style.backgroundImage = `url("${track.cover || DEFAULT_COVER}")`;
+    if (fullPlayerBackdrop) {
+      const coverUrl = track.cover || DEFAULT_COVER;
+      fullPlayerBackdrop.style.backgroundImage = `url("${coverUrl}")`;
+      applyAmbientBackdrop(coverUrl, track.id);
+    }
     updateLikeCurrentBtn(track);
     updatePlayingHighlight();
+    renderTrackReactions(track.id);
 
     miniTrackName.textContent = track.title;
     miniTrackArtist.textContent = metaLine;
     miniCover.src = track.cover || DEFAULT_COVER;
     miniPlayer.hidden = false;
     document.body.classList.add("has-mini-player");
+  }
 
-    registerPlay(track);
+  /* ============================================================
+     REAZIONI RAPIDE (emoji sul brano in riproduzione)
+  ============================================================ */
+  function renderTrackReactions(trackId) {
+    if (!trackReactionsEl) return;
+    trackReactionsEl.innerHTML = "";
+    const counts = reactionCountsByTrack[trackId] || {};
+    const mine = myReactionsByTrack[trackId] || new Set();
+
+    REACTION_EMOJIS.forEach((emoji) => {
+      const chip = document.createElement("button");
+      chip.className = "reaction-chip" + (mine.has(emoji) ? " mine" : "");
+      chip.type = "button";
+      chip.title = mine.has(emoji) ? "Togli reazione" : "Reagisci";
+
+      const emojiSpan = document.createElement("span");
+      emojiSpan.textContent = emoji;
+      chip.appendChild(emojiSpan);
+
+      const count = counts[emoji] || 0;
+      if (count > 0) {
+        const countSpan = document.createElement("span");
+        countSpan.className = "reaction-chip-count";
+        countSpan.textContent = String(count);
+        chip.appendChild(countSpan);
+      }
+
+      chip.addEventListener("click", () => toggleReaction(trackId, emoji));
+      trackReactionsEl.appendChild(chip);
+    });
+  }
+
+  async function toggleReaction(trackId, emoji) {
+    const mine = myReactionsByTrack[trackId] || new Set();
+    const hasIt = mine.has(emoji);
+
+    // ottimistico: la conferma/correzione arriva comunque dal prossimo
+    // loadData() (anche via realtime, se lo stesso brano è aperto altrove)
+    const counts = reactionCountsByTrack[trackId] || {};
+    if (hasIt) {
+      mine.delete(emoji);
+      counts[emoji] = Math.max((counts[emoji] || 1) - 1, 0);
+    } else {
+      mine.add(emoji);
+      counts[emoji] = (counts[emoji] || 0) + 1;
+    }
+    myReactionsByTrack[trackId] = mine;
+    reactionCountsByTrack[trackId] = counts;
+    if (nowPlayingId === trackId) renderTrackReactions(trackId);
+
+    const { error } = hasIt
+      ? await supabase.from("track_reactions").delete().eq("track_id", trackId).eq("user_id", currentUser.id).eq("emoji", emoji)
+      : await supabase.from("track_reactions").insert({ track_id: trackId, user_id: currentUser.id, emoji });
+
+    if (error) {
+      console.error(error);
+      showToast("Errore nel salvare la reazione.");
+      await loadData(); // riallinea lo stato ottimistico con quello reale
+    }
   }
 
   function registerPlay(track) {
@@ -2577,16 +3230,20 @@ if (isAppPage) {
   audioPlayer.addEventListener("play", () => {
     document.body.classList.add("audio-playing");
     setPlayPauseIcon(true);
+    startVisualizer();
   });
 
   audioPlayer.addEventListener("pause", () => {
     document.body.classList.remove("audio-playing");
     setPlayPauseIcon(false);
+    stopVisualizer();
+    cancelCrossfade();
   });
 
   audioPlayer.addEventListener("ended", () => {
     document.body.classList.remove("audio-playing");
     setPlayPauseIcon(false);
+    stopVisualizer();
   });
 
   /* BARRA DI AVANZAMENTO (sostituisce i controlli nativi del browser) */
@@ -2607,20 +3264,26 @@ if (isAppPage) {
   audioPlayer.addEventListener("timeupdate", () => {
     seekBar.value = audioPlayer.currentTime;
     currentTimeLabel.textContent = formatTime(audioPlayer.currentTime);
-    const pct = audioPlayer.duration ? (audioPlayer.currentTime / audioPlayer.duration) * 100 : 0;
-    seekBar.style.setProperty("--progress", `${pct}%`);
-    if (miniProgressFill) miniProgressFill.style.width = `${pct}%`;
+    const ratio = audioPlayer.duration ? audioPlayer.currentTime / audioPlayer.duration : 0;
+    seekBar.style.setProperty("--progress", `${ratio * 100}%`);
+    if (miniProgressFill) miniProgressFill.style.width = `${ratio * 100}%`;
+    lastSeekProgressRatio = ratio;
+    drawWaveform(ratio);
+    maybeStartCrossfade();
   });
 
   seekBar?.addEventListener("input", () => {
     audioPlayer.currentTime = Number(seekBar.value);
     currentTimeLabel.textContent = formatTime(audioPlayer.currentTime);
-    const pct = seekBar.max ? (seekBar.value / seekBar.max) * 100 : 0;
-    seekBar.style.setProperty("--progress", `${pct}%`);
-    if (miniProgressFill) miniProgressFill.style.width = `${pct}%`;
+    const ratio = seekBar.max ? seekBar.value / seekBar.max : 0;
+    seekBar.style.setProperty("--progress", `${ratio * 100}%`);
+    if (miniProgressFill) miniProgressFill.style.width = `${ratio * 100}%`;
+    lastSeekProgressRatio = ratio;
+    drawWaveform(ratio);
   });
 
   audioPlayer.addEventListener("ended", () => {
+    if (isCrossfading) return; // il passaggio al brano successivo lo gestisce già finishCrossfade()
     if (repeatMode === "one") {
       audioPlayer.currentTime = 0;
       audioPlayer.play();
