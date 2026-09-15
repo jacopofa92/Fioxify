@@ -1,0 +1,9 @@
+# chiavi di firma Android: non devono MAI finire nel repo, che è pubblico
+# su GitHub Pages (chiunque potrebbe scaricarle e firmare app a tuo nome)
+*.keystore
+*.jks
+
+# artefatti di build Android
+*.apk
+*.aab
+*.idsig

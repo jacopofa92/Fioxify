@@ -41,12 +41,45 @@
   margin: 0;
   padding: 0;
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* niente lampo azzurrino del browser al tap/click su un elemento */
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* niente rimbalzo elastico agli estremi né pull-to-refresh: l'app deve
+   sembrare nativa, non una pagina web trascinabile */
+html,
+body {
+  overscroll-behavior: none;
 }
 
 body {
   background: var(--bg-canvas);
   color: var(--text-primary);
   overflow-x: hidden;
+}
+
+/* i contenitori con scroll proprio non devono propagare lo scroll (e il
+   rimbalzo) alla pagina quando arrivano a fondo corsa */
+.tracks-list,
+.app-main,
+.full-player-overlay,
+.playlists-list {
+  overscroll-behavior: contain;
+}
+
+/* la "chrome" dell'interfaccia non è testo da selezionare: evita sia la
+   selezione azzurra sia il menu contestuale al long-press su mobile */
+button,
+.nav-tab,
+.view-tab,
+.auth-tab,
+.track-item,
+.playlist-item-row,
+.reaction-chip,
+.mini-player {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 /* --------------------------------------------------

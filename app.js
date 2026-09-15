@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.9.0";
+const APP_VERSION = "1.9.1";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -924,10 +924,22 @@ if (isAppPage) {
   /* ESCI (interrompe l'audio ed esce dall'app, senza fare logout) */
   exitBtn?.addEventListener("click", () => {
     audioPlayer.pause();
+
+    // Dentro l'APK (guscio Capacitor) il bridge nativo è disponibile anche
+    // caricando il sito remoto, e l'app si può chiudere davvero. Nel browser
+    // invece window.close() è consentita solo sulle finestre aperte da script:
+    // se dopo il tentativo la pagina è ancora lì, spieghiamo come uscire.
+    const capApp = window.Capacitor?.Plugins?.App;
+    if (capApp?.exitApp) {
+      capApp.exitApp();
+      return;
+    }
+    if (navigator.app?.exitApp) {
+      navigator.app.exitApp();
+      return;
+    }
+
     window.close();
-    // window.close() funziona solo sulle finestre aperte da script (o nelle
-    // PWA installate in standalone): se la pagina è ancora visibile dopo
-    // il tentativo, il browser l'ha bloccato e avvisiamo l'utente
     setTimeout(() => {
       if (!document.hidden) {
         showToast('Chiudi la scheda o l\'app dal tuo dispositivo per uscire.');
