@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.12.0";
+const APP_VERSION = "1.12.1";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -477,7 +477,6 @@ if (isAppPage) {
   const statMyUploads = document.getElementById("stat-my-uploads");
   const statMyFavorites = document.getElementById("stat-my-favorites");
   const statMyTopTracks = document.getElementById("stat-my-top-tracks");
-  const statMyTopArtists = document.getElementById("stat-my-top-artists");
   const statPlaysChart = document.getElementById("stat-my-chart");
   const fileInput = document.getElementById("file-input");
   const uploadBtn = document.getElementById("upload-btn");
@@ -868,22 +867,6 @@ if (isAppPage) {
       value: `${userPlayStats[t.id].count} ascolti`,
     }));
 
-    const byArtist = {};
-    allTracks.forEach((t) => {
-      const plays = userPlayStats[t.id]?.count || 0;
-      if (!plays) return;
-      const artist = t.artist || "Sconosciuto";
-      byArtist[artist] = (byArtist[artist] || 0) + plays;
-    });
-    const topArtists = Object.entries(byArtist)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
-
-    renderStatList(statMyTopArtists, topArtists, ([artist, plays]) => ({
-      name: artist,
-      value: `${plays} ascolti`,
-    }));
-
     renderStatBarChart(buildLast30DaysPlays());
   }
 
@@ -941,14 +924,52 @@ if (isAppPage) {
       statPlaysChart.innerHTML = '<p class="stat-empty">Ancora nessun ascolto negli ultimi 30 giorni.</p>';
       return;
     }
-    const maxPlays = Math.max(...days.map((d) => d.plays), 1);
-    days.forEach((d) => {
+
+    const total = days.reduce((sum, d) => sum + d.plays, 0);
+    const maxPlays = Math.max(...days.map((d) => d.plays));
+    const peak = days.find((d) => d.plays === maxPlays);
+
+    const head = document.createElement("div");
+    head.className = "stat-chart-head";
+    const totalEl = document.createElement("span");
+    totalEl.className = "stat-chart-total";
+    totalEl.textContent = `${total} ${total === 1 ? "ascolto" : "ascolti"}`;
+    const peakEl = document.createElement("span");
+    peakEl.className = "stat-chart-peak";
+    peakEl.textContent = `record ${maxPlays} il ${formatDayLabel(peak.day)}`;
+    head.appendChild(totalEl);
+    head.appendChild(peakEl);
+
+    const bars = document.createElement("div");
+    bars.className = "stat-chart-bars";
+    days.forEach((d, i) => {
       const bar = document.createElement("div");
-      bar.className = "stat-bar";
-      bar.style.height = `${Math.max((d.plays / maxPlays) * 100, 4)}%`;
-      bar.title = `${d.day}: ${d.plays} ascolti`;
-      statPlaysChart.appendChild(bar);
+      const isToday = i === days.length - 1;
+      bar.className = "stat-bar" + (d.plays ? "" : " is-empty") + (isToday ? " is-today" : "");
+      // i giorni a zero restano come trattino sulla base: si vede che il
+      // giorno esiste ma non ci sono ascolti, invece di sparire
+      bar.style.height = d.plays ? `${Math.max((d.plays / maxPlays) * 100, 8)}%` : "2px";
+      bar.title = `${formatDayLabel(d.day)}: ${d.plays} ${d.plays === 1 ? "ascolto" : "ascolti"}`;
+      bars.appendChild(bar);
     });
+
+    const axis = document.createElement("div");
+    axis.className = "stat-chart-axis";
+    const from = document.createElement("span");
+    from.textContent = formatDayLabel(days[0].day);
+    const to = document.createElement("span");
+    to.textContent = "oggi";
+    axis.appendChild(from);
+    axis.appendChild(to);
+
+    statPlaysChart.appendChild(head);
+    statPlaysChart.appendChild(bars);
+    statPlaysChart.appendChild(axis);
+  }
+
+  function formatDayLabel(isoDay) {
+    const [, month, day] = isoDay.split("-");
+    return `${day}/${month}`;
   }
 
   /* ============================================================
