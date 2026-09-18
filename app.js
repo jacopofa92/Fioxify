@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.10.0";
+const APP_VERSION = "1.10.1";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -34,9 +34,10 @@ const ICONS = {
   pause:
     '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="4.5" width="3.6" height="15" rx="1.4"/><rect x="13.4" y="4.5" width="3.6" height="15" rx="1.4"/></svg>',
   repeat:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10a4 4 0 0 1 4 4v1"/><path d="M17 20H7a4 4 0 0 1-4-4v-1"/><path d="m18 6 3 3-3 3"/><path d="m6 18-3-3 3-3"/></svg>',
+  // stessa spirale, con l'"1" al centro: si legge come "ripeti questo brano"
   repeatOne:
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><path d="M11 10h1v4"/></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10a4 4 0 0 1 4 4v1"/><path d="M17 20H7a4 4 0 0 1-4-4v-1"/><path d="m18 6 3 3-3 3"/><path d="m6 18-3-3 3-3"/><path d="m10.6 10.4 1.6-1.1v5.4"/></svg>',
   heart:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>',
 };
@@ -2897,11 +2898,16 @@ if (isAppPage) {
       const buckets = 120;
       const bucketSize = Math.max(Math.floor(raw.length / buckets), 1);
       const peaks = new Float32Array(buckets);
+      // si campiona a salti invece di leggere tutti i campioni: su un brano
+      // di 4 minuti sarebbero ~10 milioni di letture sul thread principale,
+      // abbastanza da far scattare l'interfaccia al cambio brano. Con ~250
+      // punti per barra il disegno è indistinguibile.
+      const step = Math.max(Math.floor(bucketSize / 250), 1);
       for (let i = 0; i < buckets; i++) {
         let max = 0;
         const start = i * bucketSize;
         const end = Math.min(start + bucketSize, raw.length);
-        for (let j = start; j < end; j++) {
+        for (let j = start; j < end; j += step) {
           const v = Math.abs(raw[j]);
           if (v > max) max = v;
         }
@@ -3177,8 +3183,23 @@ if (isAppPage) {
     currentQueue = queueList.slice();
     currentIndex = currentQueue.findIndex((t) => t.id === track.id);
 
+    // L'interfaccia va aggiornata PRIMA di scaricare l'audio. Un brano non
+    // ancora in cache può metterci secondi, e finché si aspettava restava
+    // tutto fermo sul brano precedente: sembrava che il tasto si fosse
+    // inceppato, per poi sbloccarsi di colpo quando il file arrivava.
+    audioPlayer.pause();
+    resetProgressUi();
+    currentWaveformPeaks = null;
+    drawWaveform(0);
+    applyNowPlayingUI(track);
+    setPlayerLoading(true);
+
     const audioUrl = await getTrackAudioUrl(track.storage_path);
+    // se nel frattempo si è passati a un altro brano, questa richiesta è
+    // vecchia e non deve sovrascrivere quella nuova
+    if (nowPlayingId !== track.id) return;
     if (!audioUrl) {
+      setPlayerLoading(false);
       showToast("Errore nella riproduzione del brano.");
       return;
     }
@@ -3187,11 +3208,9 @@ if (isAppPage) {
     // sia già pronta per il visualizer e riusabile per decodificare la waveform
     getAudioAnalyser();
 
-    currentWaveformPeaks = null;
-    drawWaveform(0);
-
     try {
       const blob = await getTrackAudioBlob(track.storage_path, audioUrl);
+      if (nowPlayingId !== track.id) return;
       if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
       currentObjectUrl = URL.createObjectURL(blob);
       audioPlayer.src = currentObjectUrl;
@@ -3205,9 +3224,14 @@ if (isAppPage) {
       console.error(err);
       audioPlayer.src = audioUrl; // fallback diretto se fetch/cache manuale fallisce
     }
+
+    setPlayerLoading(false);
     audioPlayer.volume = 1;
     audioPlayer.play();
+    registerPlay(track);
+  }
 
+  function resetProgressUi() {
     seekBar.value = 0;
     seekBar.max = 0;
     seekBar.style.setProperty("--progress", "0%");
@@ -3215,9 +3239,13 @@ if (isAppPage) {
     if (miniProgressFill) miniProgressFill.style.width = "0%";
     currentTimeLabel.textContent = "0:00";
     durationLabel.textContent = "0:00";
+  }
 
-    applyNowPlayingUI(track);
-    registerPlay(track);
+  // rotella sul tasto play mentre il brano si scarica: senza, il tempo di
+  // attesa era indistinguibile da un blocco dell'app
+  function setPlayerLoading(loading) {
+    playPauseBtn?.classList.toggle("is-loading", loading);
+    miniPlayPauseBtn?.classList.toggle("is-loading", loading);
   }
 
   // stato/UI del "brano in riproduzione": estratto da play() così il

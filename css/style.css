@@ -1366,6 +1366,36 @@ body.audio-playing .track-item.playing .track-cover-small {
   fill: currentColor;
 }
 
+/* attesa mentre il brano si scarica: l'icona lascia il posto a una rotella,
+   così il tempo di caricamento non si confonde con un blocco dell'app */
+.control-btn-primary,
+.mini-play-btn {
+  position: relative;
+}
+
+.control-btn-primary.is-loading svg,
+.mini-play-btn.is-loading svg {
+  visibility: hidden;
+}
+
+.control-btn-primary.is-loading::after,
+.mini-play-btn.is-loading::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-right-color: #fff;
+  animation: btn-spinner-spin 0.65s cubic-bezier(0.55, 0.15, 0.45, 0.85) infinite;
+}
+
+.mini-play-btn.is-loading::after {
+  width: 15px;
+  height: 15px;
+}
+
 .control-btn {
   background: var(--bg-surface-2);
   border: 1px solid var(--border-subtle);
