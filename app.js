@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.13.4";
+const APP_VERSION = "1.13.5";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -1521,6 +1521,10 @@ if (isAppPage) {
   }
 
   function render() {
+    // un menu aperto è agganciato al body: va chiuso prima di buttare via
+    // la riga che lo conteneva, altrimenti resterebbe lì a mezz'aria
+    closeRowMenu();
+
     document.querySelectorAll(".view-tab").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.view === currentView);
     });
@@ -1569,7 +1573,11 @@ if (isAppPage) {
     emptyMessage.style.display = "none";
 
     list.forEach((track) => {
-      tracksList.appendChild(buildTrackItem(track, list, { selectable: selectionMode }));
+      // dalla libreria si riproduce un brano solo: la coda resta vuota.
+      // Passando qui l'intero elenco visibile, cliccare una canzone
+      // riempiva la coda con tutta la libreria. Album, playlist e gruppi
+      // per artista continuano invece a costruire una coda vera.
+      tracksList.appendChild(buildTrackItem(track, [track], { selectable: selectionMode }));
     });
   }
 
@@ -1781,7 +1789,7 @@ if (isAppPage) {
       if (expandedGroupKey === groupKey) {
         const ul = document.createElement("ul");
         ul.className = "tracks-list";
-        tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks)));
+        tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { queueLabel: groupKey })));
         detail.appendChild(ul);
         detail.classList.add("open");
       }
@@ -1896,8 +1904,8 @@ if (isAppPage) {
         item.textContent = c.name;
         item.addEventListener("click", async (e) => {
           e.stopPropagation();
+          closeRowMenu();
           await addFn(track.id, c.id);
-          menu.classList.remove("open");
         });
         menu.appendChild(item);
       });
@@ -1924,7 +1932,7 @@ if (isAppPage) {
       item.textContent = label;
       item.addEventListener("click", async (e) => {
         e.stopPropagation();
-        menu.classList.remove("open");
+        closeRowMenu();
         await handler();
       });
       menu.appendChild(item);
@@ -2018,7 +2026,7 @@ if (isAppPage) {
         selectCheckbox.dispatchEvent(new Event("change"));
         return;
       }
-      play(track, queueList);
+      play(track, queueList, opts.queueLabel || null);
     });
 
     likeBtn.addEventListener("click", async (e) => {
@@ -2028,19 +2036,9 @@ if (isAppPage) {
 
     addBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      document.querySelectorAll(".add-to-playlist-menu.open").forEach((m) => {
-        if (m !== menu) m.classList.remove("open");
-      });
-      const opening = !menu.classList.contains("open");
-      menu.classList.toggle("open", opening);
-      // il menu è in posizione fissa: la lista brani ha overflow-y e
-      // ritagliava qualunque elemento posizionato al suo interno
-      if (opening) {
-        openFloatingMenu = { menu, anchor: addBtn };
-        positionFloatingMenu(menu, addBtn);
-      } else {
-        openFloatingMenu = null;
-      }
+      const wasOpen = menu.classList.contains("open");
+      closeRowMenu();
+      if (!wasOpen) openRowMenu(menu, addBtn, addWrap);
     });
 
     let editorController = null;
@@ -2100,12 +2098,39 @@ if (isAppPage) {
   }
 
   document.addEventListener("click", () => {
+    closeRowMenu();
     document.querySelectorAll(".add-to-playlist-menu.open").forEach((m) => m.classList.remove("open"));
   });
 
-  // menu attualmente aperto, con il pulsante a cui è agganciato: serve a
-  // riposizionarlo mentre la lista scorre
+  // menu attualmente aperto, con il pulsante a cui è agganciato e il
+  // contenitore da cui proviene: serve a riposizionarlo mentre la lista
+  // scorre e a rimetterlo al suo posto quando si chiude
   let openFloatingMenu = null;
+
+  /* Il menu di una riga viene spostato dentro il <body> finché resta
+     aperto. Non basta dichiararlo "fixed": se un antenato ha una
+     transform (e .track-item:hover ne applica una, che sul touch resta
+     appiccicata dopo il tocco) quell'antenato diventa il riferimento per
+     il posizionamento fisso, e il menu finisce calcolato rispetto alla
+     riga invece che allo schermo — cioè fuori dalla vista. Spostandolo
+     nel body non c'è più nessun antenato che possa ritagliarlo o
+     spostarlo. Spostare un nodo non gli fa perdere i suoi gestori. */
+  function openRowMenu(menu, anchorBtn, wrap) {
+    document.body.appendChild(menu);
+    menu.classList.add("open");
+    positionFloatingMenu(menu, anchorBtn);
+    openFloatingMenu = { menu, anchor: anchorBtn, wrap };
+  }
+
+  function closeRowMenu() {
+    if (!openFloatingMenu) return;
+    const { menu, wrap } = openFloatingMenu;
+    menu.classList.remove("open");
+    // rimesso nella sua riga: così, se la lista viene ridisegnata, se ne
+    // va insieme alla riga invece di restare orfano dentro il body
+    wrap.appendChild(menu);
+    openFloatingMenu = null;
+  }
 
   /* Posiziona un menu a tendina rispetto al pulsante che lo apre.
      Serve perché il menu è "fixed": così nessun contenitore che scorre
@@ -2140,14 +2165,14 @@ if (isAppPage) {
     () => {
       if (!openFloatingMenu) return;
       const { menu, anchor } = openFloatingMenu;
-      if (!menu.classList.contains("open")) {
-        openFloatingMenu = null;
+      // il pulsante è stato rimosso dalla pagina (lista ridisegnata)
+      if (!anchor.isConnected) {
+        closeRowMenu();
         return;
       }
       const rect = anchor.getBoundingClientRect();
       if (rect.bottom < 0 || rect.top > window.innerHeight) {
-        menu.classList.remove("open");
-        openFloatingMenu = null;
+        closeRowMenu();
         return;
       }
       positionFloatingMenu(menu, anchor);
@@ -2601,7 +2626,7 @@ if (isAppPage) {
     } else {
       const ul = document.createElement("ul");
       ul.className = "tracks-list";
-      tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { playlistId: pl.id, canEdit })));
+      tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { playlistId: pl.id, canEdit, queueLabel: pl.name })));
       detail.appendChild(ul);
       if (canEdit) attachDragReorder(ul, pl.id, playlistTracksMap, "playlist_tracks", "playlist_id");
     }
@@ -2826,7 +2851,7 @@ if (isAppPage) {
     } else {
       const ul = document.createElement("ul");
       ul.className = "tracks-list";
-      tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { albumId: al.id, canEdit })));
+      tracks.forEach((t) => ul.appendChild(buildTrackItem(t, tracks, { albumId: al.id, canEdit, queueLabel: al.name })));
       detail.appendChild(ul);
       if (canEdit) attachDragReorder(ul, al.id, albumTracksMap, "album_tracks", "album_id");
     }

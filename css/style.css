@@ -2446,6 +2446,16 @@ body.has-mini-player .bulk-bar {
   transform: translateY(-1px);
 }
 
+/* Sul touch non esiste un vero "passaggio del mouse": lo stato hover
+   resta attaccato all'ultimo elemento toccato. Oltre a essere brutto, la
+   transform crea un nuovo riferimento per gli elementi in posizione
+   fissa contenuti nella riga, e mandava fuori posto il menu ⋯. */
+@media (hover: none) {
+  .track-item:hover {
+    transform: none;
+  }
+}
+
 .track-main-row {
   display: flex;
   align-items: center;
