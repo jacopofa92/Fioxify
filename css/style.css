@@ -1296,6 +1296,118 @@ body.audio-playing .track-item.playing .track-cover-small {
 }
 
 /* --------------------------------------------------
+   CODA DI RIPRODUZIONE (nel player esteso)
+-------------------------------------------------- */
+.player-queue {
+  width: 100%;
+  max-width: 420px;
+  /* il player ha text-align:center: la coda va ricentrata come blocco e
+     riportata a testo allineato a sinistra */
+  margin: 18px auto 0;
+  text-align: left;
+}
+
+.player-queue-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.player-queue-title {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.player-queue-source {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-queue-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  /* la coda può essere lunga: scorre per conto suo senza allungare
+     all'infinito il player */
+  max-height: 232px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+}
+
+.player-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.player-queue-item:hover {
+  background: var(--bg-surface-2);
+}
+
+.player-queue-position {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: right;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+.player-queue-cover {
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.player-queue-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.player-queue-track {
+  font-size: 0.82rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-queue-artist {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-queue-duration {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+
+/* --------------------------------------------------
    REAZIONI RAPIDE (sul brano in riproduzione)
 -------------------------------------------------- */
 .track-reactions {

@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.10.1";
+const APP_VERSION = "1.11.0";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -545,6 +545,9 @@ if (isAppPage) {
   const fullPlayerBackdrop = document.getElementById("full-player-backdrop");
   const collapsePlayerBtn = document.getElementById("collapse-player-btn");
   const trackReactionsEl = document.getElementById("track-reactions");
+  const playerQueueEl = document.getElementById("player-queue");
+  const playerQueueList = document.getElementById("player-queue-list");
+  const playerQueueSource = document.getElementById("player-queue-source");
 
   /* STATE */
   let currentUser = null;
@@ -568,6 +571,7 @@ if (isAppPage) {
 
   let currentQueue = [];
   let currentIndex = -1;
+  let currentQueueLabel = null; // "Album X", "Playlist Y"... mostrato sopra la coda
   let nowPlayingId = null;
 
   /* Signed URL dei brani: createSignedUrl genera un token diverso ogni
@@ -1682,7 +1686,7 @@ if (isAppPage) {
       playBtn.title = `Riproduci tutti i brani di ${name}`;
       playBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        play(tracks[0], tracks);
+        play(tracks[0], tracks, name);
       });
 
       actions.appendChild(playBtn);
@@ -2289,7 +2293,7 @@ if (isAppPage) {
       playBtn.title = "Riproduci";
       playBtn.addEventListener("click", (e) => {
         e.stopPropagation();
-        play(sp.tracks[0], sp.tracks);
+        play(sp.tracks[0], sp.tracks, sp.name);
       });
       actions.appendChild(playBtn);
       row.appendChild(actions);
@@ -2343,7 +2347,7 @@ if (isAppPage) {
         e.stopPropagation();
         const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
         if (!tracks.length) return;
-        play(tracks[0], tracks);
+        play(tracks[0], tracks, pl.name);
         // mostra la scaletta se non è già aperta, così si vede cosa sta suonando
         if (expandedPlaylistId !== pl.id) {
           expandedPlaylistId = pl.id;
@@ -2570,7 +2574,7 @@ if (isAppPage) {
         e.stopPropagation();
         const tracks = trackIds.map((id) => allTracks.find((t) => t.id === id)).filter(Boolean);
         if (!tracks.length) return;
-        play(tracks[0], tracks);
+        play(tracks[0], tracks, al.name);
         // mostra la scaletta se non è già aperta, così si vede cosa sta suonando
         if (expandedAlbumId !== al.id) {
           expandedAlbumId = al.id;
@@ -3149,11 +3153,11 @@ if (isAppPage) {
       stop: () => audioPlayer.pause(),
       nexttrack: () => {
         const idx = pickNextIndex();
-        if (idx >= 0) play(currentQueue[idx], currentQueue);
+        if (idx >= 0) play(currentQueue[idx], currentQueue, currentQueueLabel);
       },
       previoustrack: () => {
         const idx = pickPrevIndex();
-        if (idx >= 0) play(currentQueue[idx], currentQueue);
+        if (idx >= 0) play(currentQueue[idx], currentQueue, currentQueueLabel);
       },
       seekto: (data) => {
         if (data && typeof data.seekTime === "number") audioPlayer.currentTime = data.seekTime;
@@ -3178,10 +3182,11 @@ if (isAppPage) {
   /* ============================================================
      PLAYER: PLAY / CODA / SHUFFLE / REPEAT
   ============================================================ */
-  async function play(track, queueList) {
+  async function play(track, queueList, sourceLabel = null) {
     cancelCrossfade();
     currentQueue = queueList.slice();
     currentIndex = currentQueue.findIndex((t) => t.id === track.id);
+    currentQueueLabel = sourceLabel;
 
     // L'interfaccia va aggiornata PRIMA di scaricare l'audio. Un brano non
     // ancora in cache può metterci secondi, e finché si aspettava restava
@@ -3268,12 +3273,73 @@ if (isAppPage) {
     updatePlayingHighlight();
     renderTrackReactions(track.id);
     publishMediaMetadata(track);
+    renderPlayerQueue();
 
     miniTrackName.textContent = track.title;
     miniTrackArtist.textContent = metaLine;
     miniCover.src = track.cover || DEFAULT_COVER;
     miniPlayer.hidden = false;
     document.body.classList.add("has-mini-player");
+  }
+
+  /* ============================================================
+     CODA DI RIPRODUZIONE
+     Mostra i brani che verranno dopo quello corrente e permette di
+     saltare direttamente a uno di essi, restando nella stessa coda
+     (così l'album o la playlist non si "perde" cliccando il quinto).
+  ============================================================ */
+  function renderPlayerQueue() {
+    if (!playerQueueEl || !playerQueueList) return;
+
+    const upcoming = currentIndex >= 0 ? currentQueue.slice(currentIndex + 1) : [];
+    playerQueueEl.hidden = upcoming.length === 0;
+    playerQueueList.innerHTML = "";
+    if (!upcoming.length) return;
+
+    playerQueueSource.textContent = currentQueueLabel ? `da ${currentQueueLabel}` : "";
+
+    upcoming.forEach((track, offset) => {
+      const li = document.createElement("li");
+      li.className = "player-queue-item";
+
+      const position = document.createElement("span");
+      position.className = "player-queue-position";
+      // numero reale nella coda, non nella sottolista: cosi' "il quinto"
+      // dell'album resta il quinto anche mentre lo si ascolta
+      position.textContent = String(currentIndex + offset + 2);
+
+      const cover = document.createElement("img");
+      cover.className = "player-queue-cover";
+      cover.src = track.cover || DEFAULT_COVER;
+      cover.alt = "";
+      cover.loading = "lazy";
+
+      const info = document.createElement("div");
+      info.className = "player-queue-info";
+
+      const title = document.createElement("span");
+      title.className = "player-queue-track";
+      title.textContent = track.title;
+
+      const artist = document.createElement("span");
+      artist.className = "player-queue-artist";
+      artist.textContent = track.artist || "";
+
+      info.appendChild(title);
+      if (track.artist) info.appendChild(artist);
+
+      const duration = document.createElement("span");
+      duration.className = "player-queue-duration";
+      duration.textContent = track.duration ? formatTime(track.duration) : "";
+
+      li.appendChild(position);
+      li.appendChild(cover);
+      li.appendChild(info);
+      li.appendChild(duration);
+
+      li.addEventListener("click", () => play(track, currentQueue, currentQueueLabel));
+      playerQueueList.appendChild(li);
+    });
   }
 
   /* ============================================================
@@ -3402,12 +3468,12 @@ if (isAppPage) {
 
   nextBtn?.addEventListener("click", () => {
     const idx = pickNextIndex();
-    if (idx >= 0) play(currentQueue[idx], currentQueue);
+    if (idx >= 0) play(currentQueue[idx], currentQueue, currentQueueLabel);
   });
 
   prevBtn?.addEventListener("click", () => {
     const idx = pickPrevIndex();
-    if (idx >= 0) play(currentQueue[idx], currentQueue);
+    if (idx >= 0) play(currentQueue[idx], currentQueue, currentQueueLabel);
   });
 
   shuffleBtn?.addEventListener("click", () => {
@@ -3523,7 +3589,7 @@ if (isAppPage) {
       return;
     }
     const idx = pickNextIndex();
-    if (idx >= 0) play(currentQueue[idx], currentQueue);
+    if (idx >= 0) play(currentQueue[idx], currentQueue, currentQueueLabel);
   });
 
   /* ============================================================
