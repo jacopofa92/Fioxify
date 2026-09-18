@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.9.2";
+const APP_VERSION = "1.9.3";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -40,6 +40,21 @@ function showToast(message, type = "error") {
     setTimeout(() => toast.remove(), 250);
   }, 3500);
 }
+
+/* ============================================================
+   LOADER A TUTTA PAGINA
+   Viene nascosto solo quando si sa cosa mostrare: il form di login,
+   oppure la libreria già pronta. Se resta visibile fino al redirect,
+   il passaggio index.html -> app.html non si vede proprio.
+============================================================ */
+function hideAppLoader() {
+  document.getElementById("app-loader")?.classList.add("is-hidden");
+}
+
+// rete di sicurezza: se il controllo sessione si pianta (rete assente,
+// Supabase irraggiungibile) meglio mostrare la pagina che lasciare
+// l'utente bloccato davanti a un loader che gira all'infinito
+setTimeout(hideAppLoader, 8000);
 
 /* ============================================================
    MODALE CONFERMA ELIMINAZIONE (richiede di scrivere "elimina")
@@ -334,12 +349,18 @@ if (isAuthPage) {
 
   (async () => {
     const { data } = await supabase.auth.getSession();
-    if (!data.session) return;
+    if (!data.session) {
+      hideAppLoader();
+      return;
+    }
     const profile = await fetchOwnProfileStatus(data.session.user.id);
     if (profile.is_admin || profile.status === "approved") {
+      // niente hideAppLoader: il loader deve restare finché la pagina
+      // non cambia, altrimenti si rivede il form di login per un istante
       window.location.href = "app.html";
     } else {
       await supabase.auth.signOut();
+      hideAppLoader();
     }
   })();
 }
@@ -673,6 +694,9 @@ if (isAppPage) {
     }
 
     await loadData();
+    // solo ora la libreria è piena: nascondere prima farebbe vedere
+    // l'app montarsi a pezzi
+    hideAppLoader();
     subscribeToRealtimeUpdates();
     registerMediaSessionActions();
   })();
@@ -2898,7 +2922,7 @@ if (isAppPage) {
   const audioPlayerCrossfade = document.getElementById("audio-player-crossfade");
   const CROSSFADE_SECONDS = 5;
   let isCrossfading = false;
-  let crossfadeRAF = null;
+  let crossfadeTimer = null;
 
   function seekWhenReady(el, time) {
     if (el.readyState >= 1) el.currentTime = time;
@@ -2908,8 +2932,8 @@ if (isAppPage) {
   function cancelCrossfade() {
     if (!isCrossfading && !audioPlayerCrossfade.src) return;
     isCrossfading = false;
-    if (crossfadeRAF) cancelAnimationFrame(crossfadeRAF);
-    crossfadeRAF = null;
+    if (crossfadeTimer) clearInterval(crossfadeTimer);
+    crossfadeTimer = null;
     audioPlayerCrossfade.pause();
     audioPlayerCrossfade.removeAttribute("src");
     audioPlayer.volume = 1;
@@ -2939,22 +2963,27 @@ if (isAppPage) {
       audioPlayerCrossfade.volume = 0;
       await audioPlayerCrossfade.play();
 
-      const fadeDurationMs = Math.max(Math.min(CROSSFADE_SECONDS, remaining), 0.5) * 1000;
+      // la dissolvenza deve chiudersi poco PRIMA della fine naturale del
+      // brano: chiudendosi nello stesso istante, finishCrossfade ed "ended"
+      // facevano a gara e quando vinceva "ended" la coda restava ferma
+      const fadeDurationMs = Math.max(Math.min(CROSSFADE_SECONDS, remaining - 0.4), 0.5) * 1000;
       const startTime = performance.now();
       const startVolumeOut = audioPlayer.volume;
 
-      const step = (now) => {
-        if (!isCrossfading) return;
-        const t = Math.min((now - startTime) / fadeDurationMs, 1);
-        audioPlayer.volume = startVolumeOut * (1 - t);
-        audioPlayerCrossfade.volume = t;
-        if (t < 1) {
-          crossfadeRAF = requestAnimationFrame(step);
-        } else {
-          finishCrossfade(nextTrack, nextIndex, objectUrl, blob);
+      // un timer, non requestAnimationFrame: a schermo spento le animazioni
+      // vengono sospese e la dissolvenza non si chiuderebbe mai, lasciando
+      // la riproduzione bloccata sul brano corrente
+      crossfadeTimer = setInterval(() => {
+        if (!isCrossfading) {
+          clearInterval(crossfadeTimer);
+          crossfadeTimer = null;
+          return;
         }
-      };
-      crossfadeRAF = requestAnimationFrame(step);
+        const t = Math.min((performance.now() - startTime) / fadeDurationMs, 1);
+        audioPlayer.volume = Math.max(startVolumeOut * (1 - t), 0);
+        audioPlayerCrossfade.volume = Math.min(t, 1);
+        if (t >= 1) finishCrossfade(nextTrack, nextIndex, objectUrl, blob);
+      }, 50);
     } catch (err) {
       console.error(err);
       isCrossfading = false;
@@ -2962,8 +2991,8 @@ if (isAppPage) {
   }
 
   function finishCrossfade(nextTrack, nextIndex, objectUrl, blob) {
-    if (crossfadeRAF) cancelAnimationFrame(crossfadeRAF);
-    crossfadeRAF = null;
+    if (crossfadeTimer) clearInterval(crossfadeTimer);
+    crossfadeTimer = null;
 
     const resumeTime = audioPlayerCrossfade.currentTime;
     audioPlayerCrossfade.pause();
@@ -3410,7 +3439,11 @@ if (isAppPage) {
   });
 
   audioPlayer.addEventListener("ended", () => {
-    if (isCrossfading) return; // il passaggio al brano successivo lo gestisce già finishCrossfade()
+    // se la dissolvenza risulta ancora in corso vuol dire che non ha fatto
+    // in tempo a subentrare: va annullata e si prosegue comunque, altrimenti
+    // la riproduzione resta ferma qui (era il caso degli album che non
+    // andavano avanti da soli)
+    if (isCrossfading) cancelCrossfade();
     if (repeatMode === "one") {
       audioPlayer.currentTime = 0;
       audioPlayer.play();

@@ -17,6 +17,39 @@
   <script defer src="app.js"></script>
 </head>
 <body class="auth-body">
+  <script>
+    // Gira prima che il browser dipinga: se non c'è una sessione salvata si
+    // toglie subito il loader e si va dritti al form, senza farlo lampeggiare.
+    // Con una sessione salvata il loader resta e copre il redirect alla libreria.
+    (function () {
+      try {
+        var hasSession = Object.keys(localStorage).some(function (k) {
+          return k.indexOf("sb-") === 0 && k.indexOf("-auth-token") !== -1;
+        });
+        if (!hasSession) document.documentElement.classList.add("no-stored-session");
+      } catch (e) {
+        // localStorage non disponibile (private browsing, storage bloccato):
+        // meglio mostrare il login che restare su un loader eterno
+        document.documentElement.classList.add("no-stored-session");
+      }
+    })();
+  </script>
+
+  <div id="app-loader" class="app-loader">
+    <div class="app-loader-inner">
+      <div class="app-loader-badge">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
+          <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
+        </svg>
+      </div>
+      <div class="app-loader-bars" aria-hidden="true">
+        <span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <p class="app-loader-text">Fioxify</p>
+    </div>
+  </div>
+
   <div class="auth-container">
     <h1 class="logo">Fioxify</h1>
 

@@ -1,6 +1,6 @@
 // Tenere allineato ad APP_VERSION in app.js: cambiarlo forza
 // il service worker a scartare la cache precedente e riscaricare l'app.
-const CACHE_NAME = "fioxify-shell-v1.9.2";
+const CACHE_NAME = "fioxify-shell-v1.9.3";
 
 const SHELL_ASSETS = [
   "index.html",
