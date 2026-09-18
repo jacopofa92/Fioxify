@@ -323,7 +323,9 @@
       <span id="mini-track-name" class="mini-player-title"></span>
       <span id="mini-track-artist" class="mini-player-artist"></span>
     </div>
-    <button id="mini-play-pause-btn" class="mini-play-btn" title="Play">▶</button>
+    <button id="mini-play-pause-btn" class="mini-play-btn" title="Play">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72a1 1 0 0 0 1.54.84l10.78-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14Z"/></svg>
+    </button>
   </div>
 
   <!-- PLAYER ESTESO (a schermo intero, come il "Now Playing" di Spotify) -->
@@ -346,7 +348,9 @@
             class="track-cover"
             alt="Cover"
           />
-          <button id="like-current-btn" class="cover-like-btn" title="Preferito">🤍</button>
+          <button id="like-current-btn" class="cover-like-btn" title="Preferito">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>
+          </button>
           <div class="cover-equalizer" aria-hidden="true">
             <span></span><span></span><span></span><span></span>
           </div>
@@ -367,11 +371,21 @@
       </div>
 
       <div class="player-controls-row">
-        <button id="shuffle-btn" class="control-btn" title="Shuffle">🔀</button>
-        <button id="prev-btn" class="control-btn" title="Precedente">⏮</button>
-        <button id="play-pause-btn" class="control-btn control-btn-primary" title="Play">▶</button>
-        <button id="next-btn" class="control-btn" title="Successivo">⏭</button>
-        <button id="repeat-btn" class="control-btn" title="Ripeti">🔁</button>
+        <button id="shuffle-btn" class="control-btn" title="Shuffle">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5"/><path d="M4 20 21 3"/><path d="M21 16v5h-5"/><path d="m15 15 6 6"/><path d="m4 4 5 5"/></svg>
+        </button>
+        <button id="prev-btn" class="control-btn" title="Precedente">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19.4 4.2a1 1 0 0 1 .6.92v13.76a1 1 0 0 1-1.56.83L9 13.2v5.3a1 1 0 0 1-2 0v-13a1 1 0 0 1 2 0v5.3l9.44-6.51a1 1 0 0 1 .96-.09Z"/></svg>
+        </button>
+        <button id="play-pause-btn" class="control-btn control-btn-primary" title="Play">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5.14v13.72a1 1 0 0 0 1.54.84l10.78-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14Z"/></svg>
+        </button>
+        <button id="next-btn" class="control-btn" title="Successivo">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.6 4.2a1 1 0 0 0-.6.92v13.76a1 1 0 0 0 1.56.83L15 13.2v5.3a1 1 0 0 0 2 0v-13a1 1 0 0 0-2 0v5.3L5.56 4.29a1 1 0 0 0-.96-.09Z"/></svg>
+        </button>
+        <button id="repeat-btn" class="control-btn" title="Ripeti">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+        </button>
       </div>
 
       <div id="track-reactions" class="track-reactions"></div>

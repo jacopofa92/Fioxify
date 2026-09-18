@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.9.3";
+const APP_VERSION = "1.10.0";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -20,6 +20,26 @@ const DEFAULT_COVER =
       '<text x="50%" y="55%" font-size="110" text-anchor="middle" dominant-baseline="middle" fill="#3b82f6">♪</text>' +
       "</svg>"
   );
+
+/* ============================================================
+   ICONE DEL PLAYER
+   Quelle che cambiano con lo stato (play/pausa, modalità ripeti,
+   cuore) vanno sostituite da JS, quindi stanno qui; le fisse sono
+   direttamente in app.html. Stesso stile della navigazione: 24x24,
+   tratto arrotondato per le icone lineari, pieno per i comandi di
+   trasporto, che così si leggono meglio a colpo d'occhio.
+============================================================ */
+const ICONS = {
+  play: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8 5.14v13.72a1 1 0 0 0 1.54.84l10.78-6.86a1 1 0 0 0 0-1.68L9.54 4.3A1 1 0 0 0 8 5.14Z"/></svg>',
+  pause:
+    '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="4.5" width="3.6" height="15" rx="1.4"/><rect x="13.4" y="4.5" width="3.6" height="15" rx="1.4"/></svg>',
+  repeat:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>',
+  repeatOne:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="m7 22-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/><path d="M11 10h1v4"/></svg>',
+  heart:
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>',
+};
 
 /* ============================================================
    TOAST (feedback errori / conferme, valido su tutte le pagine)
@@ -894,6 +914,15 @@ if (isAppPage) {
      playlist o un album, la vista si aggiorna da sola senza dover
      ricaricare la pagina.
   ============================================================ */
+  function notifyNewTrack(track) {
+    if (!track) return;
+    if (track.user_id === currentUser.id) return; // chi carica sa già di averlo fatto
+    if (track.is_private) return;
+
+    const who = profilesById[track.user_id]?.email || "Qualcuno";
+    showToast(`${who} ha aggiunto "${track.title}"`, "success");
+  }
+
   function subscribeToRealtimeUpdates() {
     let refreshTimer = null;
     const scheduleRefresh = () => {
@@ -906,6 +935,17 @@ if (isAppPage) {
     tables.forEach((table) => {
       channel = channel.on("postgres_changes", { event: "*", schema: "public", table }, scheduleRefresh);
     });
+
+    // avviso immediato quando un altro utente pubblica un brano: il refresh
+    // della libreria arriva comunque poco dopo, ma la notifica non deve
+    // aspettarlo. Le righe di brani privati altrui non arrivano nemmeno,
+    // perché il realtime applica le stesse policy RLS della select.
+    channel = channel.on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "tracks" },
+      (payload) => notifyNewTrack(payload.new)
+    );
+
     channel.subscribe();
   }
 
@@ -3298,7 +3338,10 @@ if (isAppPage) {
   function updateLikeCurrentBtn(track) {
     const liked = favoriteTrackIds.has(track.id);
     likeCurrentBtn.classList.toggle("liked", liked);
-    likeCurrentBtn.textContent = liked ? "♥" : "🤍";
+    // stesso tracciato, cambia solo il riempimento: il cuore "si riempie"
+    // invece di sostituirsi con un'emoji diversa
+    likeCurrentBtn.innerHTML = ICONS.heart;
+    likeCurrentBtn.title = liked ? "Togli dai preferiti" : "Aggiungi ai preferiti";
   }
 
   function pickNextIndex() {
@@ -3347,7 +3390,9 @@ if (isAppPage) {
   repeatBtn?.addEventListener("click", () => {
     repeatMode = repeatMode === "none" ? "all" : repeatMode === "all" ? "one" : "none";
     repeatBtn.classList.toggle("active", repeatMode !== "none");
-    repeatBtn.textContent = repeatMode === "one" ? "🔂" : "🔁";
+    repeatBtn.innerHTML = repeatMode === "one" ? ICONS.repeatOne : ICONS.repeat;
+    repeatBtn.title =
+      repeatMode === "one" ? "Ripeti il brano" : repeatMode === "all" ? "Ripeti la coda" : "Ripeti";
   });
 
   likeCurrentBtn?.addEventListener("click", async () => {
@@ -3365,14 +3410,14 @@ if (isAppPage) {
   });
 
   function setPlayPauseIcon(isPlaying) {
-    const icon = isPlaying ? "⏸" : "▶";
+    const icon = isPlaying ? ICONS.pause : ICONS.play;
     const label = isPlaying ? "Pausa" : "Play";
     if (playPauseBtn) {
-      playPauseBtn.textContent = icon;
+      playPauseBtn.innerHTML = icon;
       playPauseBtn.title = label;
     }
     if (miniPlayPauseBtn) {
-      miniPlayPauseBtn.textContent = icon;
+      miniPlayPauseBtn.innerHTML = icon;
       miniPlayPauseBtn.title = label;
     }
   }

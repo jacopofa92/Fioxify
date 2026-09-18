@@ -1335,11 +1335,45 @@ body.audio-playing .track-item.playing .track-cover-small {
   min-width: 8px;
 }
 
+/* icone SVG al posto delle emoji: stesso stile della navigazione, e
+   soprattutto stesso peso visivo su tutti i dispositivi (le emoji le
+   disegna il sistema, quindi cambiavano forma tra telefono e desktop) */
+.control-btn svg {
+  display: block;
+  width: 20px;
+  height: 20px;
+}
+
+.control-btn-primary svg {
+  width: 22px;
+  height: 22px;
+}
+
+.mini-play-btn svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+
+.cover-like-btn svg {
+  display: block;
+  width: 17px;
+  height: 17px;
+}
+
+/* il cuore si riempie invece di cambiare icona */
+.cover-like-btn.liked svg {
+  fill: currentColor;
+}
+
 .control-btn {
   background: var(--bg-surface-2);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 9px 11px;
   font-size: 0.95rem;
   color: var(--text-primary);
   line-height: 1;
