@@ -79,6 +79,10 @@
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
           <span>Carica</span>
         </button>
+        <button class="nav-tab" data-page="stats">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 17v-5"/><path d="M13 17V8"/><path d="M18 17v-9"/></svg>
+          <span>Statistiche</span>
+        </button>
         <button class="nav-tab" data-page="admin" id="admin-nav-tab" hidden>
           <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.7 7.7 0 0 0-1.7-1L15 3.6h-4l-.4 2.5a7.7 7.7 0 0 0-1.7 1l-2.3-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7.7 7.7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 1.7-1l2.3 1 2-3.4Z"/></svg>
           <span>Admin</span>
@@ -247,34 +251,42 @@
       </div>
     </section>
 
+    <!-- PAGINA STATISTICHE (personali, visibile a tutti) -->
+    <section id="page-stats" class="app-page">
+      <div class="library-section">
+        <div class="library-inner">
+          <h2 class="page-title">Le tue statistiche</h2>
+          <p class="admin-section-hint">Un ascolto viene conteggiato solo quando hai sentito almeno metà del brano.</p>
+
+          <div class="stats-cards">
+            <div class="stat-card"><span class="stat-value" id="stat-my-plays">–</span><span class="stat-label">Ascolti totali</span></div>
+            <div class="stat-card"><span class="stat-value" id="stat-my-tracks">–</span><span class="stat-label">Brani ascoltati</span></div>
+            <div class="stat-card"><span class="stat-value" id="stat-my-uploads">–</span><span class="stat-label">Brani caricati</span></div>
+            <div class="stat-card"><span class="stat-value" id="stat-my-favorites">–</span><span class="stat-label">Preferiti</span></div>
+          </div>
+
+          <div class="stats-columns">
+            <div class="stats-column">
+              <h3 class="section-subtitle">I tuoi brani più ascoltati</h3>
+              <ol id="stat-my-top-tracks" class="stat-list"></ol>
+            </div>
+            <div class="stats-column">
+              <h3 class="section-subtitle">I tuoi artisti più ascoltati</h3>
+              <ol id="stat-my-top-artists" class="stat-list"></ol>
+            </div>
+          </div>
+
+          <h3 class="section-subtitle">I tuoi ascolti, ultimi 30 giorni</h3>
+          <div id="stat-my-chart" class="stat-bar-chart"></div>
+        </div>
+      </div>
+    </section>
+
     <!-- PAGINA ADMIN (visibile solo agli amministratori) -->
     <section id="page-admin" class="app-page">
       <div class="library-section">
         <div class="library-inner">
-          <h2 class="page-title">Statistiche</h2>
-          <div id="admin-stats-panel" class="admin-stats-panel">
-            <div class="stats-cards">
-              <div class="stat-card"><span class="stat-value" id="stat-total-tracks">–</span><span class="stat-label">Brani totali</span></div>
-              <div class="stat-card"><span class="stat-value" id="stat-total-plays">–</span><span class="stat-label">Ascolti totali</span></div>
-              <div class="stat-card"><span class="stat-value" id="stat-total-users">–</span><span class="stat-label">Utenti</span></div>
-            </div>
-
-            <div class="stats-columns">
-              <div class="stats-column">
-                <h3 class="section-subtitle">Brani più ascoltati</h3>
-                <ol id="stat-top-tracks" class="stat-list"></ol>
-              </div>
-              <div class="stats-column">
-                <h3 class="section-subtitle">Chi carica di più</h3>
-                <ol id="stat-top-uploaders" class="stat-list"></ol>
-              </div>
-            </div>
-
-            <h3 class="section-subtitle">Ascolti, ultimi 30 giorni</h3>
-            <div id="stat-plays-chart" class="stat-bar-chart"></div>
-          </div>
-
-          <h2 class="page-title admin-section-title">Richieste di registrazione</h2>
+          <h2 class="page-title">Richieste di registrazione</h2>
           <p class="admin-section-hint">Gli utenti registrati restano in attesa finché non approvi il loro account.</p>
           <ul id="admin-pending-list" class="playlists-list"></ul>
           <p id="admin-pending-empty" class="empty-message"></p>
@@ -308,6 +320,10 @@
     <button class="nav-tab" data-page="upload">
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"/><path d="M7 8l5-5 5 5"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
       <span>Carica</span>
+    </button>
+    <button class="nav-tab" data-page="stats">
+      <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v16a2 2 0 0 0 2 2h16"/><path d="M8 17v-5"/><path d="M13 17V8"/><path d="M18 17v-9"/></svg>
+      <span>Statistiche</span>
     </button>
     <button class="nav-tab" data-page="admin" id="admin-nav-tab-mobile" hidden>
       <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/><path d="M19.4 13a7.6 7.6 0 0 0 0-2l2-1.5-2-3.4-2.3 1a7.7 7.7 0 0 0-1.7-1L15 3.6h-4l-.4 2.5a7.7 7.7 0 0 0-1.7 1l-2.3-1-2 3.4L6.6 11a7.6 7.6 0 0 0 0 2l-2 1.5 2 3.4 2.3-1a7.7 7.7 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.7 7.7 0 0 0 1.7-1l2.3 1 2-3.4Z"/></svg>

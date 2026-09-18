@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.11.0";
+const APP_VERSION = "1.12.0";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -472,12 +472,13 @@ if (isAppPage) {
   const adminPendingList = document.getElementById("admin-pending-list");
   const adminPendingEmpty = document.getElementById("admin-pending-empty");
   const adminUsersList = document.getElementById("admin-users-list");
-  const statTotalTracks = document.getElementById("stat-total-tracks");
-  const statTotalPlays = document.getElementById("stat-total-plays");
-  const statTotalUsers = document.getElementById("stat-total-users");
-  const statTopTracks = document.getElementById("stat-top-tracks");
-  const statTopUploaders = document.getElementById("stat-top-uploaders");
-  const statPlaysChart = document.getElementById("stat-plays-chart");
+  const statMyPlays = document.getElementById("stat-my-plays");
+  const statMyTracks = document.getElementById("stat-my-tracks");
+  const statMyUploads = document.getElementById("stat-my-uploads");
+  const statMyFavorites = document.getElementById("stat-my-favorites");
+  const statMyTopTracks = document.getElementById("stat-my-top-tracks");
+  const statMyTopArtists = document.getElementById("stat-my-top-artists");
+  const statPlaysChart = document.getElementById("stat-my-chart");
   const fileInput = document.getElementById("file-input");
   const uploadBtn = document.getElementById("upload-btn");
   const uploadStatus = document.getElementById("upload-status");
@@ -560,6 +561,7 @@ if (isAppPage) {
   let albumTracksMap = {}; // albumId -> [trackId, ...]
   let favoriteTrackIds = new Set(); // preferiti PERSONALI dell'utente loggato
   let userPlayStats = {}; // trackId -> { count, lastPlayedAt } PERSONALI dell'utente loggato
+  let userPlayRows = []; // righe grezze degli ascolti, servono al grafico per giorno
   let reactionCountsByTrack = {}; // trackId -> { emoji: count } di TUTTI gli utenti
   let myReactionsByTrack = {}; // trackId -> Set(emoji) SOLO dell'utente loggato
   const REACTION_EMOJIS = ["🔥", "❤️", "😂", "👏", "🤯"];
@@ -836,39 +838,73 @@ if (isAppPage) {
     others.forEach((p) => adminUsersList.appendChild(renderAdminUserRow(p, { showActions: false })));
 
     await refreshAdminPendingBadge();
-    await loadAdminStats();
   }
 
   /* ============================================================
-     ADMIN: dashboard statistiche
-     track_plays ha RLS che limita la select alle proprie righe:
-     l'aggregazione su tutti gli utenti passa dalla RPC
-     admin_get_stats(), che fa lei stessa il check is_admin invece
-     di affidarsi alla RLS (security definer).
+     STATISTICHE PERSONALI (visibili a tutti)
+     Si costruiscono con i dati che loadData() ha già in memoria:
+     gli ascolti sono per definizione solo i propri (track_plays ha
+     una RLS che limita la lettura alle proprie righe), quindi non
+     serve nessuna chiamata aggiuntiva.
   ============================================================ */
-  async function loadAdminStats() {
-    if (!isAdmin || !statTotalTracks) return;
-    const { data, error } = await supabase.rpc("admin_get_stats");
-    if (error) {
-      console.error(error);
-      return;
+  function renderStats() {
+    if (!statMyPlays) return;
+
+    const playedIds = Object.keys(userPlayStats);
+    const totalPlays = playedIds.reduce((sum, id) => sum + (userPlayStats[id]?.count || 0), 0);
+
+    statMyPlays.textContent = totalPlays;
+    statMyTracks.textContent = playedIds.length;
+    statMyUploads.textContent = allTracks.filter((t) => t.user_id === currentUser.id).length;
+    statMyFavorites.textContent = favoriteTrackIds.size;
+
+    const topTracks = allTracks
+      .filter((t) => (userPlayStats[t.id]?.count || 0) > 0)
+      .sort((a, b) => userPlayStats[b.id].count - userPlayStats[a.id].count)
+      .slice(0, 10);
+
+    renderStatList(statMyTopTracks, topTracks, (t) => ({
+      name: t.artist ? `${t.title} — ${t.artist}` : t.title,
+      value: `${userPlayStats[t.id].count} ascolti`,
+    }));
+
+    const byArtist = {};
+    allTracks.forEach((t) => {
+      const plays = userPlayStats[t.id]?.count || 0;
+      if (!plays) return;
+      const artist = t.artist || "Sconosciuto";
+      byArtist[artist] = (byArtist[artist] || 0) + plays;
+    });
+    const topArtists = Object.entries(byArtist)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10);
+
+    renderStatList(statMyTopArtists, topArtists, ([artist, plays]) => ({
+      name: artist,
+      value: `${plays} ascolti`,
+    }));
+
+    renderStatBarChart(buildLast30DaysPlays());
+  }
+
+  // un punto per giorno, anche quelli a zero: un grafico con i giorni
+  // vuoti saltati darebbe una lettura falsata dell'andamento
+  function buildLast30DaysPlays() {
+    const days = [];
+    const counts = {};
+    userPlayRows.forEach((row) => {
+      const day = (row.played_at || "").slice(0, 10);
+      if (day) counts[day] = (counts[day] || 0) + 1;
+    });
+
+    const today = new Date();
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      days.push({ day: key, plays: counts[key] || 0 });
     }
-
-    statTotalTracks.textContent = data.total_tracks ?? "–";
-    statTotalPlays.textContent = data.total_plays ?? "–";
-    statTotalUsers.textContent = data.total_users ?? "–";
-
-    renderStatList(statTopTracks, data.top_tracks, (row) => ({
-      name: row.artist ? `${row.title} — ${row.artist}` : row.title,
-      value: `${row.play_count} ▶`,
-    }));
-
-    renderStatList(statTopUploaders, data.top_uploaders, (row) => ({
-      name: row.email,
-      value: `${row.track_count} brani`,
-    }));
-
-    renderStatBarChart(data.plays_last_30_days || []);
+    return days;
   }
 
   function renderStatList(listEl, rows, mapRow) {
@@ -899,7 +935,9 @@ if (isAppPage) {
   function renderStatBarChart(days) {
     if (!statPlaysChart) return;
     statPlaysChart.innerHTML = "";
-    if (!days.length) {
+    // i giorni sono sempre 30, anche vuoti: il grafico è "senza dati" solo
+    // se in tutto il periodo non c'è un solo ascolto
+    if (!days.length || days.every((d) => !d.plays)) {
       statPlaysChart.innerHTML = '<p class="stat-empty">Ancora nessun ascolto negli ultimi 30 giorni.</p>';
       return;
     }
@@ -1323,6 +1361,7 @@ if (isAppPage) {
     favoriteTrackIds = new Set((favoriteRows || []).map((r) => r.track_id));
 
     userPlayStats = {};
+    userPlayRows = playRows || [];
     (playRows || []).forEach((row) => {
       const stat = userPlayStats[row.track_id] || { count: 0, lastPlayedAt: null };
       stat.count += 1;
@@ -3067,7 +3106,9 @@ if (isAppPage) {
     }
 
     applyNowPlayingUI(nextTrack);
-    registerPlay(nextTrack);
+    // il brano entrante riparte col suo conteggio: verrà registrato solo
+    // se ascoltato per almeno metà, come per gli altri
+    resetListeningProgress();
 
     isCrossfading = false;
   }
@@ -3233,7 +3274,9 @@ if (isAppPage) {
     setPlayerLoading(false);
     audioPlayer.volume = 1;
     audioPlayer.play();
-    registerPlay(track);
+    // l'ascolto non si conta più all'avvio: lo fa il timeupdate quando si
+    // è sentita almeno metà del brano (vedi trackListeningProgress)
+    resetListeningProgress();
   }
 
   function resetProgressUi() {
@@ -3251,6 +3294,42 @@ if (isAppPage) {
   function setPlayerLoading(loading) {
     playPauseBtn?.classList.toggle("is-loading", loading);
     miniPlayPauseBtn?.classList.toggle("is-loading", loading);
+  }
+
+  /* ============================================================
+     CONTEGGIO ASCOLTI (soglia del 50%)
+     Si somma il tempo realmente ascoltato, non la posizione raggiunta:
+     così saltare avanti fino a oltre metà brano non conta come ascolto,
+     mentre riascoltare più volte lo stesso pezzo sì.
+  ============================================================ */
+  let listenedSeconds = 0;
+  let lastListenPosition = 0;
+  let playAlreadyCounted = false;
+
+  function resetListeningProgress() {
+    listenedSeconds = 0;
+    lastListenPosition = audioPlayer.currentTime || 0;
+    playAlreadyCounted = false;
+  }
+
+  function trackListeningProgress() {
+    const position = audioPlayer.currentTime;
+    const delta = position - lastListenPosition;
+    lastListenPosition = position;
+
+    // solo avanzamenti normali: un salto (avanti o indietro) produce un
+    // delta grande o negativo e non va contato come tempo ascoltato
+    if (delta > 0 && delta < 2) listenedSeconds += delta;
+
+    if (playAlreadyCounted) return;
+    const duration = audioPlayer.duration;
+    if (!duration || !isFinite(duration)) return;
+    if (listenedSeconds < duration / 2) return;
+
+    const track = allTracks.find((t) => t.id === nowPlayingId);
+    if (!track) return;
+    playAlreadyCounted = true;
+    registerPlay(track);
   }
 
   // stato/UI del "brano in riproduzione": estratto da play() così il
@@ -3564,6 +3643,7 @@ if (isAppPage) {
     lastSeekProgressRatio = ratio;
     drawWaveform(ratio);
     publishPositionState();
+    trackListeningProgress();
     maybeStartCrossfade();
   });
 
@@ -3607,6 +3687,7 @@ if (isAppPage) {
       if (targetPage === "library") render();
       else if (targetPage === "albums") renderAlbums();
       else if (targetPage === "playlists") renderPlaylists();
+      else if (targetPage === "stats") renderStats();
       else if (targetPage === "admin") renderAdmin();
     });
   });

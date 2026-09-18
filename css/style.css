@@ -1814,9 +1814,11 @@ body.audio-playing .track-item.playing .track-cover-small {
   margin-bottom: 30px;
 }
 
+/* si adatta al numero di riquadri (ora sono quattro) senza doverlo
+   fissare a mano, e su schermi stretti va a capo da solo */
 .stats-cards {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
   gap: 10px;
   margin-bottom: 22px;
 }
