@@ -72,11 +72,27 @@ Nel progetto Android le icone sono state rigenerate dalla stessa immagine
 e il colore `ic_launcher_background` è stato portato da `#FFFFFF` a `#0A0C10`.
 `npx cap sync` non le tocca, ma un `npx cap add android` rifatto da zero sì.
 
-## Nota sulla riproduzione in background
+## Controlli media (autoradio Bluetooth, cuffie, schermata di blocco)
 
-Sotto c'è una WebView, non Chrome: l'audio continua quando l'app va in secondo
-piano, ma non ci sono di serie i controlli su schermata di blocco e notifica, e
-senza un servizio in foreground il sistema può chiudere l'app sotto pressione di
-memoria. Si risolve lato sito, dichiarando i metadati del brano con l'API
-`navigator.mediaSession` (supportata anche in WebView): Android mostra allora i
-controlli media e tratta l'app come riproduzione attiva.
+Una WebView, a differenza di Chrome, non pubblica da sé una **MediaSession** al
+sistema. È da lì che l'autoradio legge titolo e artista e riceve i comandi
+play/pausa/avanti/indietro (profilo Bluetooth AVRCP): senza, l'audio si sente ma
+i tasti dell'autoradio non fanno nulla.
+
+La pubblica il plugin `@capgo/capacitor-media-session`, che avvia anche un
+servizio in foreground di tipo `mediaPlayback` — utile pure contro le chiusure
+per risparmio memoria quando l'app è in secondo piano.
+
+Due permessi sono dichiarati nel **nostro** `AndroidManifest.xml` e non dal
+plugin, che si ferma a `FOREGROUND_SERVICE`:
+
+- `FOREGROUND_SERVICE_MEDIA_PLAYBACK` — da Android 14 (API 34) un servizio
+  `mediaPlayback` senza questo permesso non parte affatto;
+- `POST_NOTIFICATIONS` — solo per mostrare la notifica del player. Se l'utente la
+  nega, i comandi dell'autoradio continuano comunque a funzionare, perché passano
+  dalla MediaSession e non dalla notifica.
+
+Lato sito la logica sta in `app.js`. Nota: la pagina è remota e non impacchetta
+l'SDK JS di Capacitor, quindi `Capacitor.Plugins` è vuoto; si usano
+`Capacitor.nativePromise` e `Capacitor.nativeCallback`, che il bridge iniettato
+espone comunque. Nel browser si ricade sull'API standard `navigator.mediaSession`.

@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.9.1";
+const APP_VERSION = "1.9.2";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -674,6 +674,7 @@ if (isAppPage) {
 
     await loadData();
     subscribeToRealtimeUpdates();
+    registerMediaSessionActions();
   })();
 
   /* ============================================================
@@ -2993,6 +2994,113 @@ if (isAppPage) {
   }
 
   /* ============================================================
+     MEDIA SESSION (autoradio Bluetooth, cuffie, schermata di blocco)
+     Una WebView non pubblica da sola una sessione media al sistema:
+     senza questo l'autoradio non vede né il titolo né i comandi.
+     Dentro l'APK la pubblica il plugin nativo, nel browser si usa
+     l'API standard. Nota: sulla pagina remota Capacitor.Plugins resta
+     vuoto (l'SDK JS non è impacchettato nel sito), ma il bridge
+     iniettato espone nativePromise/nativeCallback, che è la via usata qui.
+  ============================================================ */
+  const nativeBridge =
+    window.Capacitor && typeof window.Capacitor.nativePromise === "function" ? window.Capacitor : null;
+  const webMediaSession = "mediaSession" in navigator ? navigator.mediaSession : null;
+
+  function nativeMediaCall(method, options) {
+    return nativeBridge.nativePromise("MediaSession", method, options).catch((err) => console.error(err));
+  }
+
+  function publishMediaMetadata(track) {
+    // il lato nativo sa decodificare solo bitmap: le cover dei tag ID3 sono
+    // data URI base64 e vanno bene, quella di default è un SVG e verrebbe
+    // ignorata, quindi non la passiamo nemmeno
+    const cover = track.cover || "";
+    const artwork = cover.includes(";base64,") ? [{ src: cover, sizes: "512x512", type: "image/png" }] : [];
+    const metadata = {
+      title: track.title || "Fioxify",
+      artist: track.artist || "",
+      album: track.album || "",
+      artwork,
+    };
+
+    if (nativeBridge) {
+      nativeMediaCall("setMetadata", metadata);
+      return;
+    }
+    if (webMediaSession && window.MediaMetadata) {
+      webMediaSession.metadata = new window.MediaMetadata(metadata);
+    }
+  }
+
+  function publishPlaybackState(state) {
+    if (nativeBridge) {
+      nativeMediaCall("setPlaybackState", { playbackState: state });
+      return;
+    }
+    if (webMediaSession) webMediaSession.playbackState = state;
+  }
+
+  let lastPositionPublish = 0;
+  function publishPositionState(force) {
+    if (!audioPlayer.duration || !isFinite(audioPlayer.duration)) return;
+    // timeupdate scatta ~4 volte al secondo: attraversare il bridge così
+    // spesso è inutile, all'autoradio basta un aggiornamento al secondo
+    const now = Date.now();
+    if (!force && now - lastPositionPublish < 1000) return;
+    lastPositionPublish = now;
+
+    const payload = {
+      duration: audioPlayer.duration,
+      position: audioPlayer.currentTime,
+      playbackRate: audioPlayer.playbackRate || 1,
+    };
+    if (nativeBridge) {
+      nativeMediaCall("setPositionState", payload);
+      return;
+    }
+    if (webMediaSession?.setPositionState) {
+      try {
+        webMediaSession.setPositionState(payload);
+      } catch (err) {
+        // durante un cambio brano durata e posizione possono essere incoerenti
+      }
+    }
+  }
+
+  function registerMediaSessionActions() {
+    const handlers = {
+      play: () => audioPlayer.play(),
+      pause: () => audioPlayer.pause(),
+      stop: () => audioPlayer.pause(),
+      nexttrack: () => {
+        const idx = pickNextIndex();
+        if (idx >= 0) play(currentQueue[idx], currentQueue);
+      },
+      previoustrack: () => {
+        const idx = pickPrevIndex();
+        if (idx >= 0) play(currentQueue[idx], currentQueue);
+      },
+      seekto: (data) => {
+        if (data && typeof data.seekTime === "number") audioPlayer.currentTime = data.seekTime;
+      },
+    };
+
+    Object.entries(handlers).forEach(([action, handler]) => {
+      if (nativeBridge) {
+        nativeBridge.nativeCallback("MediaSession", "setActionHandler", { action }, handler);
+        return;
+      }
+      if (webMediaSession) {
+        try {
+          webMediaSession.setActionHandler(action, handler);
+        } catch (err) {
+          // azione non supportata da questo browser: le altre restano valide
+        }
+      }
+    });
+  }
+
+  /* ============================================================
      PLAYER: PLAY / CODA / SHUFFLE / REPEAT
   ============================================================ */
   async function play(track, queueList) {
@@ -3062,6 +3170,7 @@ if (isAppPage) {
     updateLikeCurrentBtn(track);
     updatePlayingHighlight();
     renderTrackReactions(track.id);
+    publishMediaMetadata(track);
 
     miniTrackName.textContent = track.title;
     miniTrackArtist.textContent = metaLine;
@@ -3243,6 +3352,8 @@ if (isAppPage) {
     document.body.classList.add("audio-playing");
     setPlayPauseIcon(true);
     startVisualizer();
+    publishPlaybackState("playing");
+    publishPositionState(true);
   });
 
   audioPlayer.addEventListener("pause", () => {
@@ -3250,12 +3361,14 @@ if (isAppPage) {
     setPlayPauseIcon(false);
     stopVisualizer();
     cancelCrossfade();
+    publishPlaybackState("paused");
   });
 
   audioPlayer.addEventListener("ended", () => {
     document.body.classList.remove("audio-playing");
     setPlayPauseIcon(false);
     stopVisualizer();
+    publishPlaybackState("paused");
   });
 
   /* BARRA DI AVANZAMENTO (sostituisce i controlli nativi del browser) */
@@ -3271,6 +3384,7 @@ if (isAppPage) {
   audioPlayer.addEventListener("loadedmetadata", () => {
     seekBar.max = audioPlayer.duration || 0;
     durationLabel.textContent = formatTime(audioPlayer.duration);
+    publishPositionState(true);
   });
 
   audioPlayer.addEventListener("timeupdate", () => {
@@ -3281,6 +3395,7 @@ if (isAppPage) {
     if (miniProgressFill) miniProgressFill.style.width = `${ratio * 100}%`;
     lastSeekProgressRatio = ratio;
     drawWaveform(ratio);
+    publishPositionState();
     maybeStartCrossfade();
   });
 
