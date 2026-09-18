@@ -1,6 +1,6 @@
 // Tenere allineato ad APP_VERSION in app.js: cambiarlo forza
 // il service worker a scartare la cache precedente e riscaricare l'app.
-const CACHE_NAME = "fioxify-shell-v1.13.2";
+const CACHE_NAME = "fioxify-shell-v1.13.3";
 
 const SHELL_ASSETS = [
   "index.html",
@@ -15,7 +15,20 @@ const SHELL_ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(SHELL_ASSETS)));
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) =>
+      // "reload" scavalca la cache HTTP: con addAll() si rischia di
+      // precaricare file già scaduti ma ancora considerati freschi
+      Promise.all(
+        SHELL_ASSETS.map((asset) =>
+          fetch(asset, { cache: "reload" })
+            .then((response) => (response.ok ? cache.put(asset, response) : null))
+            // un singolo file irraggiungibile non deve far fallire l'installazione
+            .catch(() => null)
+        )
+      )
+    )
+  );
   self.skipWaiting();
 });
 
@@ -49,8 +62,20 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
+  // GitHub Pages serve con max-age=600: senza "no-cache" il browser
+  // considera i file freschi per dieci minuti e una pubblicazione appena
+  // fatta non arriva, per quanto si riavvii l'app. Così invece si
+  // rivalida sempre col server (risposta 304 se nulla è cambiato).
+  // Gli header vengono ricopiati perché Capacitor inietta il proprio
+  // bridge nativo solo nelle risposte richieste con Accept: text/html.
+  const revalidated = new Request(request.url, {
+    headers: request.headers,
+    credentials: "same-origin",
+    cache: "no-cache",
+  });
+
   event.respondWith(
-    fetch(request)
+    fetch(revalidated)
       .then((response) => {
         if (response && response.ok) {
           const clone = response.clone();
