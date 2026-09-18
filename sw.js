@@ -1,6 +1,6 @@
 // Tenere allineato ad APP_VERSION in app.js: cambiarlo forza
 // il service worker a scartare la cache precedente e riscaricare l'app.
-const CACHE_NAME = "fioxify-shell-v1.13.1";
+const CACHE_NAME = "fioxify-shell-v1.13.2";
 
 const SHELL_ASSETS = [
   "index.html",
@@ -28,7 +28,13 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
-/* Stale-while-revalidate solo per l'app shell (stesso dominio).
+/* Prima la rete, la cache come riserva, solo per l'app shell (stesso
+   dominio). Prima era il contrario (stale-while-revalidate): si serviva
+   la copia in cache e si aggiornava per la volta dopo, quindi ogni
+   pubblicazione richiedeva DUE aperture dell'app per essere vista.
+   Siccome l'APK è solo un guscio attorno al sito, la versione giusta
+   deve arrivare subito; la cache resta per funzionare offline.
+
    Le chiamate a Supabase (auth/storage/DB) e ai CDN esterni passano
    sempre dritte in rete: qui non vanno né cache né intercettate.
    L'audio dei brani NON passa da qui: il tag <audio> genera le sue
@@ -44,18 +50,14 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   event.respondWith(
-    caches.match(request).then((cached) => {
-      const networkFetch = fetch(request)
-        .then((response) => {
-          if (response && response.ok) {
-            const clone = response.clone();
-            caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
-          }
-          return response;
-        })
-        .catch(() => cached);
-
-      return cached || networkFetch;
-    })
+    fetch(request)
+      .then((response) => {
+        if (response && response.ok) {
+          const clone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+        }
+        return response;
+      })
+      .catch(() => caches.match(request))
   );
 });

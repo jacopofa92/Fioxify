@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.13.1";
+const APP_VERSION = "1.13.2";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -1852,7 +1852,7 @@ if (isAppPage) {
     // i tag si mostrano solo se ci sono: una riga vuota per ogni brano era
     // spazio sprecato che contribuiva all'affollamento
     renderTagChips(tagsBox, track.tags || []);
-    tagsBox.hidden = !(track.tags && track.tags.length);
+    tagsRow.hidden = !(track.tags && track.tags.length);
 
     const actions = document.createElement("div");
     actions.className = "track-actions";
@@ -1959,8 +1959,10 @@ if (isAppPage) {
       );
     }
 
+    // le azioni stanno nella riga principale, accanto al titolo: da sole su
+    // una riga dedicata occupavano un'intera fascia quasi vuota sotto ogni
+    // brano, ed era il motivo per cui la lista risultava così alta
     tagsRow.appendChild(tagsBox);
-    tagsRow.appendChild(actions);
 
     let selectCheckbox = null;
     if (opts.selectable) {
@@ -1980,8 +1982,11 @@ if (isAppPage) {
 
     row.appendChild(img);
     row.appendChild(info);
-    row.appendChild(tagsRow);
+    row.appendChild(actions);
     li.appendChild(row);
+    // i tag, quando ci sono, vanno sotto: sono a lunghezza variabile e
+    // starebbero stretti accanto al titolo
+    li.appendChild(tagsRow);
 
     const attribution = document.createElement("p");
     attribution.className = "track-attribution";

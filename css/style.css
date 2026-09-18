@@ -1631,12 +1631,19 @@ body.audio-playing .track-item.playing .track-cover-small {
   padding-left: 34px;
 }
 
+/* se i chip e gli strumenti non ci stanno su una riga, gli strumenti
+   scendono sotto: meglio due righe pulite che dei chip tagliati a metà */
 .library-filters {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px 12px;
   margin-bottom: 16px;
+}
+
+.library-filters .view-tabs {
+  flex: 1 1 200px;
 }
 
 .library-tools {
@@ -2114,11 +2121,13 @@ body.has-mini-player .bulk-bar {
 /* --------------------------------------------------
    TRACK ACTIONS (like / aggiungi / modifica / privacy / elimina)
 -------------------------------------------------- */
+/* le azioni stanno in fondo alla riga principale, accanto al titolo */
 .track-actions {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
   gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .icon-btn {
@@ -2467,12 +2476,13 @@ body.has-mini-player .bulk-bar {
   text-overflow: ellipsis;
 }
 
+/* riga dei tag: ora è una riga propria sotto al titolo, mostrata solo
+   quando il brano ha davvero dei tag */
 .track-tags-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-left: auto;
 }
 
 /* EDITOR INLINE */
@@ -2580,12 +2590,9 @@ body.has-mini-player .bulk-bar {
 
   /* la riga singola cover+titolo+tag+azioni non regge su schermi stretti:
      si impila cover+titolo sopra, tag e azioni vanno a capo sotto */
-  .track-main-row {
-    flex-wrap: wrap;
-  }
-
+  /* la riga principale non va più a capo: cover, titolo e azioni devono
+     restare su una riga sola, altrimenti ogni brano occupa il doppio */
   .track-tags-row {
-    margin-left: 0;
     width: 100%;
     row-gap: 8px;
   }
