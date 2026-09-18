@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.12.1";
+const APP_VERSION = "1.12.2";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -630,6 +630,13 @@ if (isAppPage) {
   }
 
   let shuffleOn = false;
+  // ordine di riproduzione casuale calcolato una volta sola: prima si
+  // sorteggiava un indice a ogni cambio brano, quindi la coda mostrata non
+  // corrispondeva a quello che sarebbe partito davvero (e un brano poteva
+  // ripetersi mentre altri non uscivano mai)
+  let shuffleOrder = [];
+  let shufflePos = -1;
+  let shuffleSignature = "";
   let repeatMode = "none"; // "none" | "all" | "one"
   let expandedPlaylistId = null;
   let expandedAlbumId = null;
@@ -3109,6 +3116,7 @@ if (isAppPage) {
     audioPlayerCrossfade.removeAttribute("src");
 
     currentIndex = nextIndex;
+    syncShuffleOrder();
     if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
     currentObjectUrl = objectUrl;
     audioPlayer.src = objectUrl;
@@ -3249,6 +3257,7 @@ if (isAppPage) {
     currentQueue = queueList.slice();
     currentIndex = currentQueue.findIndex((t) => t.id === track.id);
     currentQueueLabel = sourceLabel;
+    syncShuffleOrder();
 
     // L'interfaccia va aggiornata PRIMA di scaricare l'audio. Un brano non
     // ancora in cache può metterci secondi, e finché si aspettava restava
@@ -3391,12 +3400,22 @@ if (isAppPage) {
   function renderPlayerQueue() {
     if (!playerQueueEl || !playerQueueList) return;
 
-    const upcoming = currentIndex >= 0 ? currentQueue.slice(currentIndex + 1) : [];
+    // con la riproduzione casuale attiva si segue l'ordine sorteggiato, non
+    // quello della coda: altrimenti la lista mostrata non avrebbe niente a
+    // che vedere con i brani che partono davvero
+    const useShuffle = shuffleOn && shuffleOrder.length > 0 && shufflePos >= 0;
+    const upcomingIndexes = useShuffle
+      ? shuffleOrder.slice(shufflePos + 1)
+      : currentQueue.map((_, i) => i).slice(currentIndex + 1);
+    const upcoming = currentIndex >= 0 ? upcomingIndexes.map((i) => currentQueue[i]).filter(Boolean) : [];
+
     playerQueueEl.hidden = upcoming.length === 0;
     playerQueueList.innerHTML = "";
     if (!upcoming.length) return;
 
-    playerQueueSource.textContent = currentQueueLabel ? `da ${currentQueueLabel}` : "";
+    // senza album o playlist la coda è quella della libreria: dirlo evita di
+    // chiedersi da dove arrivino i brani elencati
+    playerQueueSource.textContent = currentQueueLabel ? `da ${currentQueueLabel}` : "dalla libreria";
 
     upcoming.forEach((track, offset) => {
       const li = document.createElement("li");
@@ -3404,9 +3423,9 @@ if (isAppPage) {
 
       const position = document.createElement("span");
       position.className = "player-queue-position";
-      // numero reale nella coda, non nella sottolista: cosi' "il quinto"
-      // dell'album resta il quinto anche mentre lo si ascolta
-      position.textContent = String(currentIndex + offset + 2);
+      // posizione nell'ordine di ascolto, non nella sottolista: "il quinto"
+      // resta il quinto anche mentre lo si sta ascoltando
+      position.textContent = String((useShuffle ? shufflePos : currentIndex) + offset + 2);
 
       const cover = document.createElement("img");
       cover.className = "player-queue-cover";
@@ -3538,15 +3557,49 @@ if (isAppPage) {
     likeCurrentBtn.title = liked ? "Togli dai preferiti" : "Aggiungi ai preferiti";
   }
 
+  /* ORDINE CASUALE
+     Deciso in anticipo e mantenuto, così la coda mostrata è davvero
+     quella che verrà riprodotta. pickNext/pickPrev restano funzioni di
+     sola lettura: le chiama anche il crossfade per sbirciare il brano
+     successivo, quindi non devono cambiare nulla. */
+  function queueFingerprint() {
+    if (!currentQueue.length) return "";
+    return `${currentQueue.length}:${currentQueue[0].id}:${currentQueue[currentQueue.length - 1].id}`;
+  }
+
+  function buildShuffleOrder() {
+    const others = currentQueue.map((_, i) => i).filter((i) => i !== currentIndex);
+    for (let i = others.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [others[i], others[j]] = [others[j], others[i]];
+    }
+    // il brano in ascolto resta in testa: l'ordine descrive cosa viene dopo
+    shuffleOrder = currentIndex >= 0 ? [currentIndex, ...others] : others;
+    shufflePos = 0;
+    shuffleSignature = queueFingerprint();
+  }
+
+  function syncShuffleOrder() {
+    if (!shuffleOn) {
+      shuffleOrder = [];
+      shufflePos = -1;
+      shuffleSignature = "";
+      return;
+    }
+    // coda cambiata (altro album, altra playlist): serve un nuovo sorteggio
+    if (shuffleSignature !== queueFingerprint()) {
+      buildShuffleOrder();
+      return;
+    }
+    shufflePos = shuffleOrder.indexOf(currentIndex);
+    if (shufflePos === -1) buildShuffleOrder();
+  }
+
   function pickNextIndex() {
     if (!currentQueue.length) return -1;
-    if (shuffleOn) {
-      if (currentQueue.length === 1) return 0;
-      let idx;
-      do {
-        idx = Math.floor(Math.random() * currentQueue.length);
-      } while (idx === currentIndex);
-      return idx;
+    if (shuffleOn && shuffleOrder.length) {
+      if (shufflePos < shuffleOrder.length - 1) return shuffleOrder[shufflePos + 1];
+      return repeatMode === "all" ? shuffleOrder[0] : -1;
     }
     if (currentIndex + 1 < currentQueue.length) return currentIndex + 1;
     return repeatMode === "all" ? 0 : -1;
@@ -3554,13 +3607,9 @@ if (isAppPage) {
 
   function pickPrevIndex() {
     if (!currentQueue.length) return -1;
-    if (shuffleOn) {
-      if (currentQueue.length === 1) return 0;
-      let idx;
-      do {
-        idx = Math.floor(Math.random() * currentQueue.length);
-      } while (idx === currentIndex);
-      return idx;
+    if (shuffleOn && shuffleOrder.length) {
+      if (shufflePos > 0) return shuffleOrder[shufflePos - 1];
+      return repeatMode === "all" ? shuffleOrder[shuffleOrder.length - 1] : -1;
     }
     if (currentIndex - 1 >= 0) return currentIndex - 1;
     return repeatMode === "all" ? currentQueue.length - 1 : -1;
@@ -3579,6 +3628,12 @@ if (isAppPage) {
   shuffleBtn?.addEventListener("click", () => {
     shuffleOn = !shuffleOn;
     shuffleBtn.classList.toggle("active", shuffleOn);
+    shuffleBtn.title = shuffleOn ? "Riproduzione casuale attiva" : "Riproduzione casuale";
+    // attivandolo si sorteggia subito il nuovo ordine, così la coda
+    // mostrata si aggiorna all'istante invece che al brano successivo
+    if (shuffleOn) buildShuffleOrder();
+    else syncShuffleOrder();
+    renderPlayerQueue();
   });
 
   repeatBtn?.addEventListener("click", () => {
