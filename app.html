@@ -98,21 +98,26 @@
       <div class="library-section">
         <div class="library-inner">
 
-          <div class="view-tabs">
-            <button class="view-tab active" data-view="library">Tutti</button>
-            <button class="view-tab" data-view="favorites">Preferiti</button>
-            <button class="view-tab" data-view="history">Cronologia</button>
-            <button class="view-tab" data-view="artists">Artisti</button>
-          </div>
-
-          <div class="filters-row">
+          <div class="library-search-row">
+            <svg class="library-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
             <input
               type="text"
               id="search-input"
               class="search-input"
               placeholder="Cerca per titolo, artista o tag..."
             />
-            <div class="filters-row-secondary">
+          </div>
+
+          <div class="library-filters">
+            <div class="view-tabs">
+              <button class="view-tab active" data-view="library">Tutti</button>
+              <button class="view-tab" data-view="favorites">Preferiti</button>
+              <button class="view-tab" data-view="history">Cronologia</button>
+            </div>
+            <div class="library-tools">
+              <button id="group-artists-btn" class="icon-btn" title="Raggruppa per artista">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.5 19a5.5 5.5 0 0 1 11 0"/><path d="M17 8.5a2.6 2.6 0 0 1 0 5"/><path d="M18.5 19a4.6 4.6 0 0 0-2.2-3.9"/></svg>
+              </button>
               <select id="sort-select" class="sort-select">
                 <option value="date">Aggiunta di recente</option>
                 <option value="title">Titolo (A-Z)</option>
@@ -123,29 +128,6 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
               </button>
             </div>
-          </div>
-
-          <!-- BARRA AZIONI MULTIPLE (visibile solo in modalità selezione) -->
-          <div id="bulk-bar" class="bulk-bar" hidden>
-            <span id="bulk-count" class="bulk-count">0 selezionati</span>
-            <div class="bulk-actions">
-              <div class="add-to-playlist-dropdown">
-                <button id="bulk-add-playlist-btn" class="icon-btn" title="Aggiungi a playlist">+ Playlist</button>
-                <div id="bulk-playlist-menu" class="add-to-playlist-menu"></div>
-              </div>
-              <div class="add-to-playlist-dropdown">
-                <button id="bulk-add-album-btn" class="icon-btn" title="Aggiungi ad album">+ Album</button>
-                <div id="bulk-album-menu" class="add-to-playlist-menu"></div>
-              </div>
-              <button id="bulk-tag-btn" class="icon-btn" title="Aggiungi tag">🏷️</button>
-              <button id="bulk-delete-btn" class="icon-btn" title="Elimina selezionati">🗑</button>
-            </div>
-            <button id="bulk-cancel-btn" class="icon-btn" title="Annulla selezione">✕</button>
-          </div>
-
-          <div id="bulk-tag-row" class="bulk-tag-row" hidden>
-            <input type="text" id="bulk-tag-input" placeholder="Tag da aggiungere ai brani selezionati" />
-            <button id="bulk-tag-apply-btn" class="btn-primary">Applica</button>
           </div>
 
           <div id="groups-panel" class="playlists-panel">
@@ -322,6 +304,31 @@
       <span>Admin</span>
     </button>
   </nav>
+
+  <!-- BARRA AZIONI MULTIPLE: flottante in basso, così entrando in modalità
+       selezione la lista non si sposta sotto ai piedi -->
+  <div id="bulk-bar" class="bulk-bar" hidden>
+    <div class="bulk-bar-main">
+      <span id="bulk-count" class="bulk-count">0 selezionati</span>
+      <div class="bulk-actions">
+        <div class="add-to-playlist-dropdown">
+          <button id="bulk-add-playlist-btn" class="icon-btn" title="Aggiungi a playlist">+ Playlist</button>
+          <div id="bulk-playlist-menu" class="add-to-playlist-menu"></div>
+        </div>
+        <div class="add-to-playlist-dropdown">
+          <button id="bulk-add-album-btn" class="icon-btn" title="Aggiungi ad album">+ Album</button>
+          <div id="bulk-album-menu" class="add-to-playlist-menu"></div>
+        </div>
+        <button id="bulk-tag-btn" class="icon-btn" title="Aggiungi tag">🏷️</button>
+        <button id="bulk-delete-btn" class="icon-btn" title="Elimina selezionati">🗑</button>
+      </div>
+      <button id="bulk-cancel-btn" class="icon-btn" title="Annulla selezione">✕</button>
+    </div>
+    <div id="bulk-tag-row" class="bulk-tag-row" hidden>
+      <input type="text" id="bulk-tag-input" placeholder="Tag da aggiungere ai brani selezionati" />
+      <button id="bulk-tag-apply-btn" class="btn-primary">Applica</button>
+    </div>
+  </div>
 
   <!-- MINI PLAYER (persistente, tocca per aprire la vista estesa) -->
   <div id="mini-player" class="mini-player" hidden>

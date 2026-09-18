@@ -45,6 +45,15 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/* L'attributo hidden deve vincere sempre. Il browser lo applica con una
+   regola di pari specificità rispetto a una classe, quindi qualunque
+   ".qualcosa { display: flex }" lo annullava silenziosamente: è così che
+   la barra di selezione multipla restava a schermo anche quando non si
+   stava selezionando nulla. */
+[hidden] {
+  display: none !important;
+}
+
 /* niente rimbalzo elastico agli estremi né pull-to-refresh: l'app deve
    sembrare nativa, non una pagina web trascinabile */
 html,
@@ -1560,20 +1569,27 @@ body.audio-playing .track-item.playing .track-cover-small {
 /* --------------------------------------------------
    VIEW TABS / SEARCH
 -------------------------------------------------- */
+/* da tab a larghezza piena a chip compatti: stanno su una riga sola
+   insieme a ordinamento e selezione */
 .view-tabs {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
-  margin-bottom: 10px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.view-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .view-tab {
-  flex: 1 1 22%;
-  min-width: 84px;
+  flex-shrink: 0;
+  white-space: nowrap;
   background: var(--bg-surface-2);
   border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 8px;
+  border-radius: 999px;
+  padding: 7px 14px;
   font-size: 0.8rem;
   color: var(--text-secondary);
   transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
@@ -1589,6 +1605,45 @@ body.audio-playing .track-item.playing .track-cover-small {
   border-color: var(--accent);
   color: var(--accent);
   font-weight: 600;
+}
+
+/* --------------------------------------------------
+   BARRA LIBRERIA: ricerca sopra, filtri e strumenti sotto
+   (prima erano fino a quattro file sovrapposte)
+-------------------------------------------------- */
+.library-search-row {
+  position: relative;
+  margin-bottom: 10px;
+}
+
+.library-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.library-search-row .search-input {
+  padding-left: 34px;
+}
+
+.library-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.library-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .filters-row {
@@ -1644,15 +1699,46 @@ body.audio-playing .track-item.playing .track-cover-small {
 /* --------------------------------------------------
    AZIONI MULTIPLE (selezione di più brani)
 -------------------------------------------------- */
+/* --------------------------------------------------
+   BARRA SELEZIONE MULTIPLA: flottante sopra il player
+   Prima si inseriva in cima alla lista, che quindi "saltava" ogni volta
+   che si entrava o usciva dalla modalità selezione.
+-------------------------------------------------- */
 .bulk-bar {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(78px + env(safe-area-inset-bottom));
+  z-index: 520; /* sopra mini player (500) e barra di navigazione (480) */
+  width: min(580px, calc(100vw - 24px));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--bg-surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.bulk-bar-main {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: var(--bg-surface-2);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 8px 10px;
-  margin-bottom: 10px;
+}
+
+body.has-mini-player .bulk-bar {
+  bottom: calc(142px + env(safe-area-inset-bottom));
+}
+
+@media (min-width: 900px) {
+  .bulk-bar {
+    bottom: 24px;
+  }
+
+  body.has-mini-player .bulk-bar {
+    bottom: 92px;
+  }
 }
 
 .bulk-count {
@@ -2134,6 +2220,59 @@ body.audio-playing .track-item.playing .track-cover-small {
 
 .add-to-playlist-menu.open {
   display: block;
+}
+
+/* --------------------------------------------------
+   MENU "ALTRE AZIONI" DELLA RIGA BRANO
+   Raccoglie aggiungi a playlist/album, modifica, privacità ed elimina:
+   in riga resta solo il cuore.
+-------------------------------------------------- */
+.track-more-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* il cuore si riempie invece di cambiare carattere */
+.icon-btn.liked svg {
+  fill: currentColor;
+}
+
+.track-menu {
+  min-width: 190px;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.track-menu-separator {
+  display: block;
+  height: 1px;
+  margin: 6px 4px;
+  background: var(--border-subtle);
+}
+
+.track-menu-action {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 7px 8px;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+}
+
+.track-menu-action:hover {
+  background: var(--bg-surface-3);
+}
+
+.track-menu-action.is-danger {
+  color: var(--danger);
+}
+
+.track-menu-action.is-danger:hover {
+  background: var(--danger-soft);
 }
 
 .add-to-playlist-menu button {

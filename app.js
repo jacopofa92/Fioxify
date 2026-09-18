@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.12.2";
+const APP_VERSION = "1.13.0";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -40,6 +40,7 @@ const ICONS = {
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4h10a4 4 0 0 1 4 4v1"/><path d="M17 20H7a4 4 0 0 1-4-4v-1"/><path d="m18 6 3 3-3 3"/><path d="m6 18-3-3 3-3"/><path d="m10.6 10.4 1.6-1.1v5.4"/></svg>',
   heart:
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg>',
+  more: '<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg>',
 };
 
 /* ============================================================
@@ -508,6 +509,7 @@ if (isAppPage) {
   const uploadDropzone = document.getElementById("upload-dropzone");
 
   const selectModeBtn = document.getElementById("select-mode-btn");
+  const groupArtistsBtn = document.getElementById("group-artists-btn");
   const bulkBar = document.getElementById("bulk-bar");
   const bulkCount = document.getElementById("bulk-count");
   const bulkAddPlaylistBtn = document.getElementById("bulk-add-playlist-btn");
@@ -564,7 +566,8 @@ if (isAppPage) {
   let reactionCountsByTrack = {}; // trackId -> { emoji: count } di TUTTI gli utenti
   let myReactionsByTrack = {}; // trackId -> Set(emoji) SOLO dell'utente loggato
   const REACTION_EMOJIS = ["🔥", "❤️", "😂", "👏", "🤯"];
-  let currentView = "library"; // "library" | "favorites" | "history" | "artists" (sotto-viste della pagina Libreria)
+  let currentView = "library"; // "library" | "favorites" | "history" (sotto-viste della pagina Libreria)
+  let groupByArtist = false; // raggruppamento per artista, applicabile a qualunque vista
   let searchTerm = "";
   let albumSearchTerm = "";
   let playlistSearchTerm = "";
@@ -1454,6 +1457,11 @@ if (isAppPage) {
     });
   });
 
+  groupArtistsBtn?.addEventListener("click", () => {
+    groupByArtist = !groupByArtist;
+    render();
+  });
+
   searchInput?.addEventListener("input", () => {
     searchTerm = searchInput.value;
     render();
@@ -1517,7 +1525,11 @@ if (isAppPage) {
       btn.classList.toggle("active", btn.dataset.view === currentView);
     });
 
-    const isGroupedView = currentView === "artists";
+    // "Artisti" non è più una quarta vista ma un raggruppamento: si può
+    // quindi raggruppare per artista anche dentro Preferiti o Cronologia,
+    // cosa che prima non era possibile
+    groupArtistsBtn?.classList.toggle("active", groupByArtist);
+    const isGroupedView = groupByArtist;
     const isListView = !isGroupedView;
 
     groupsPanel.style.display = isGroupedView ? "block" : "none";
@@ -1587,14 +1599,16 @@ if (isAppPage) {
     render();
   });
 
-  bulkCancelBtn?.addEventListener("click", () => {
+  function exitSelectionMode({ rerender = true } = {}) {
     selectionMode = false;
     selectedTrackIds.clear();
     selectModeBtn.classList.remove("active");
     bulkBar.hidden = true;
     bulkTagRow.hidden = true;
-    render();
-  });
+    if (rerender) render();
+  }
+
+  bulkCancelBtn?.addEventListener("click", () => exitSelectionMode());
 
   function populateBulkMenu(menuEl, collection, addFn) {
     menuEl.innerHTML = "";
@@ -1706,16 +1720,16 @@ if (isAppPage) {
   function renderGroupedView(field) {
     groupsList.innerHTML = "";
 
-    const term = searchTerm.trim().toLowerCase();
     const groups = {};
 
-    allTracks
-      .filter((t) => matchesSearch(t, term))
-      .forEach((t) => {
-        const key = (t[field] && t[field].trim()) || "Sconosciuto";
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(t);
-      });
+    // parte dai brani già filtrati dalla vista attiva, non da tutta la
+    // libreria: così il raggruppamento vale anche dentro Preferiti o
+    // Cronologia invece di ignorarle
+    getVisibleTracks().forEach((t) => {
+      const key = (t[field] && t[field].trim()) || "Sconosciuto";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(t);
+    });
 
     const names = Object.keys(groups).sort((a, b) => a.localeCompare(b, "it"));
 
@@ -1835,7 +1849,10 @@ if (isAppPage) {
 
     const tagsBox = document.createElement("div");
     tagsBox.className = "track-tags";
+    // i tag si mostrano solo se ci sono: una riga vuota per ogni brano era
+    // spazio sprecato che contribuiva all'affollamento
     renderTagChips(tagsBox, track.tags || []);
+    tagsBox.hidden = !(track.tags && track.tags.length);
 
     const actions = document.createElement("div");
     actions.className = "track-actions";
@@ -1843,17 +1860,19 @@ if (isAppPage) {
     const likeBtn = document.createElement("button");
     const isLiked = favoriteTrackIds.has(track.id);
     likeBtn.className = "icon-btn like-btn" + (isLiked ? " liked" : "");
-    likeBtn.textContent = isLiked ? "♥" : "♡";
-    likeBtn.title = "Preferito";
+    likeBtn.innerHTML = ICONS.heart;
+    likeBtn.title = isLiked ? "Togli dai preferiti" : "Aggiungi ai preferiti";
 
+    // un solo pulsante "altre azioni" al posto dei quattro che stavano in
+    // fila su ogni riga: aggiungi, modifica, privacy ed elimina vivono qui
     const addWrap = document.createElement("div");
     addWrap.className = "add-to-playlist-dropdown";
     const addBtn = document.createElement("button");
-    addBtn.className = "icon-btn";
-    addBtn.textContent = "+";
-    addBtn.title = "Aggiungi a playlist o album";
+    addBtn.className = "icon-btn track-more-btn";
+    addBtn.innerHTML = ICONS.more;
+    addBtn.title = "Altre azioni";
     const menu = document.createElement("div");
-    menu.className = "add-to-playlist-menu";
+    menu.className = "add-to-playlist-menu track-menu";
 
     const ownedPlaylists = playlists.filter((p) => isOwner(p));
     const ownedAlbums = albums.filter((a) => isOwner(a));
@@ -1893,60 +1912,51 @@ if (isAppPage) {
     actions.appendChild(likeBtn);
     actions.appendChild(addWrap);
 
+    function addMenuSeparator() {
+      const sep = document.createElement("span");
+      sep.className = "track-menu-separator";
+      menu.appendChild(sep);
+    }
+
+    function addMenuAction(label, handler, { danger = false } = {}) {
+      const item = document.createElement("button");
+      item.className = "track-menu-action" + (danger ? " is-danger" : "");
+      item.textContent = label;
+      item.addEventListener("click", async (e) => {
+        e.stopPropagation();
+        menu.classList.remove("open");
+        await handler();
+      });
+      menu.appendChild(item);
+    }
+
     if (opts.playlistId && opts.canEdit) {
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "icon-btn";
-      removeBtn.textContent = "✕ playlist";
-      removeBtn.title = "Rimuovi dalla playlist";
-      removeBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        await removeTrackFromPlaylist(track.id, opts.playlistId);
+      addMenuSeparator();
+      addMenuAction("Rimuovi dalla playlist", () => removeTrackFromPlaylist(track.id, opts.playlistId), {
+        danger: true,
       });
-      actions.appendChild(removeBtn);
     } else if (opts.albumId && opts.canEdit) {
-      const removeBtn = document.createElement("button");
-      removeBtn.className = "icon-btn";
-      removeBtn.textContent = "✕ album";
-      removeBtn.title = "Rimuovi dall'album";
-      removeBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        await removeTrackFromAlbum(track.id, opts.albumId);
-      });
-      actions.appendChild(removeBtn);
+      addMenuSeparator();
+      addMenuAction("Rimuovi dall'album", () => removeTrackFromAlbum(track.id, opts.albumId), { danger: true });
     } else if (!opts.playlistId && !opts.albumId && isOwner(track)) {
-      const editBtn = document.createElement("button");
-      editBtn.className = "icon-btn";
-      editBtn.textContent = "✏️";
-      editBtn.title = "Modifica info";
-      editBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        openEditor();
+      addMenuSeparator();
+      addMenuAction("Modifica info", () => openEditor());
+      addMenuAction(track.is_private ? "Rendi pubblico" : "Rendi privato", async () => {
+        // senza più il pulsante dedicato, la voce del menu va riscritta:
+        // il modo più semplice è ridisegnare la lista
+        await toggleCollectionPrivacy("tracks", track, null);
+        render();
       });
-      actions.appendChild(editBtn);
-
-      const privacyBtn = document.createElement("button");
-      privacyBtn.className = "icon-btn" + (track.is_private ? " private" : "");
-      privacyBtn.textContent = track.is_private ? "🔒" : "🌍";
-      privacyBtn.title = track.is_private ? "Privato: rendi pubblico" : "Pubblico: rendi privato";
-      privacyBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        await toggleCollectionPrivacy("tracks", track, privacyBtn);
-      });
-      actions.appendChild(privacyBtn);
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.className = "icon-btn";
-      deleteBtn.textContent = "🗑";
-      deleteBtn.title = "Elimina brano";
-      deleteBtn.addEventListener("click", (e) => {
-        e.stopPropagation();
-        confirmDelete({
-          title: "Eliminare il brano?",
-          message: `"${track.title}" verrà rimosso definitivamente dallo storage e dalla libreria: non si può annullare.`,
-          onConfirm: () => deleteTrack(track),
-        });
-      });
-      actions.appendChild(deleteBtn);
+      addMenuAction(
+        "Elimina brano",
+        () =>
+          confirmDelete({
+            title: "Eliminare il brano?",
+            message: `"${track.title}" verrà rimosso definitivamente dallo storage e dalla libreria: non si può annullare.`,
+            onConfirm: () => deleteTrack(track),
+          }),
+        { danger: true }
+      );
     }
 
     tagsRow.appendChild(tagsBox);
@@ -2107,8 +2117,9 @@ if (isAppPage) {
       // altrove basta aggiornare il cuoricino, senza ricostruire la lista
       // (evita di richiudere editor tag o playlist aperte in quel momento)
       document.querySelectorAll(`.track-item[data-track-id="${track.id}"] .like-btn`).forEach((btn) => {
+        // stessa icona, cambia solo il riempimento (vedi .icon-btn.liked svg)
         btn.classList.toggle("liked", newVal);
-        btn.textContent = newVal ? "♥" : "♡";
+        btn.title = newVal ? "Togli dai preferiti" : "Aggiungi ai preferiti";
       });
     }
   }
@@ -3760,6 +3771,10 @@ if (isAppPage) {
       document.querySelectorAll(".app-page").forEach((page) => {
         page.classList.toggle("active", page.id === `page-${targetPage}`);
       });
+      // la barra di selezione ora è flottante: uscendo dalla Libreria
+      // resterebbe sospesa sopra una pagina che non la riguarda
+      if (targetPage !== "library" && selectionMode) exitSelectionMode({ rerender: false });
+
       if (targetPage === "library") render();
       else if (targetPage === "albums") renderAlbums();
       else if (targetPage === "playlists") renderPlaylists();
