@@ -1613,7 +1613,7 @@ body.audio-playing .track-item.playing .track-cover-small {
 -------------------------------------------------- */
 .library-search-row {
   position: relative;
-  margin-bottom: 10px;
+  margin-bottom: 18px;
 }
 
 .library-search-icon {
@@ -1635,8 +1635,8 @@ body.audio-playing .track-item.playing .track-cover-small {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 12px;
+  margin-bottom: 16px;
 }
 
 .library-tools {
@@ -1725,6 +1725,18 @@ body.audio-playing .track-item.playing .track-cover-small {
   display: flex;
   align-items: center;
   gap: 10px;
+}
+
+/* la barra sta in fondo allo schermo: i suoi menu devono aprirsi verso
+   l'alto, altrimenti finiscono fuori dalla parte visibile */
+.bulk-bar .add-to-playlist-menu {
+  top: auto;
+  bottom: 100%;
+  margin-top: 0;
+  margin-bottom: 6px;
+  max-height: min(300px, 50vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 body.has-mini-player .bulk-bar {
@@ -2237,9 +2249,17 @@ body.has-mini-player .bulk-bar {
   fill: currentColor;
 }
 
+/* fisso, non assoluto: la lista brani ha overflow-y e ritagliava il menu.
+   Le coordinate le calcola positionFloatingMenu() all'apertura. */
 .track-menu {
-  min-width: 190px;
-  max-height: 260px;
+  position: fixed;
+  right: auto;
+  top: 0;
+  left: 0;
+  margin-top: 0;
+  z-index: 600;
+  min-width: 200px;
+  max-height: min(320px, 60vh);
   overflow-y: auto;
   overscroll-behavior: contain;
 }

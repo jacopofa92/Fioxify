@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.13.0";
+const APP_VERSION = "1.13.1";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -2026,7 +2026,11 @@ if (isAppPage) {
       document.querySelectorAll(".add-to-playlist-menu.open").forEach((m) => {
         if (m !== menu) m.classList.remove("open");
       });
-      menu.classList.toggle("open");
+      const opening = !menu.classList.contains("open");
+      menu.classList.toggle("open", opening);
+      // il menu è in posizione fissa: la lista brani ha overflow-y e
+      // ritagliava qualunque elemento posizionato al suo interno
+      if (opening) positionFloatingMenu(menu, addBtn);
     });
 
     let editorController = null;
@@ -2088,6 +2092,38 @@ if (isAppPage) {
   document.addEventListener("click", () => {
     document.querySelectorAll(".add-to-playlist-menu.open").forEach((m) => m.classList.remove("open"));
   });
+
+  /* Posiziona un menu a tendina rispetto al pulsante che lo apre.
+     Serve perché il menu è "fixed": così nessun contenitore che scorre
+     può ritagliarlo, ma le coordinate vanno calcolate a mano. */
+  function positionFloatingMenu(menu, anchorBtn) {
+    const margin = 8;
+    const anchor = anchorBtn.getBoundingClientRect();
+    const box = menu.getBoundingClientRect();
+
+    // allineato a destra del pulsante, ma senza uscire dallo schermo
+    let left = anchor.right - box.width;
+    left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
+
+    // sotto al pulsante se c'è spazio, altrimenti sopra
+    let top = anchor.bottom + 6;
+    if (top + box.height > window.innerHeight - margin) {
+      const above = anchor.top - box.height - 6;
+      top = above >= margin ? above : Math.max(margin, window.innerHeight - box.height - margin);
+    }
+
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  }
+
+  // scorrendo, un menu fisso resterebbe appeso lontano dal suo pulsante
+  window.addEventListener(
+    "scroll",
+    () => {
+      document.querySelectorAll(".track-menu.open").forEach((m) => m.classList.remove("open"));
+    },
+    true
+  );
 
   /* ============================================================
      PREFERITI
