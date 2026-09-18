@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.13.3";
+const APP_VERSION = "1.13.4";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -2035,7 +2035,12 @@ if (isAppPage) {
       menu.classList.toggle("open", opening);
       // il menu è in posizione fissa: la lista brani ha overflow-y e
       // ritagliava qualunque elemento posizionato al suo interno
-      if (opening) positionFloatingMenu(menu, addBtn);
+      if (opening) {
+        openFloatingMenu = { menu, anchor: addBtn };
+        positionFloatingMenu(menu, addBtn);
+      } else {
+        openFloatingMenu = null;
+      }
     });
 
     let editorController = null;
@@ -2098,6 +2103,10 @@ if (isAppPage) {
     document.querySelectorAll(".add-to-playlist-menu.open").forEach((m) => m.classList.remove("open"));
   });
 
+  // menu attualmente aperto, con il pulsante a cui è agganciato: serve a
+  // riposizionarlo mentre la lista scorre
+  let openFloatingMenu = null;
+
   /* Posiziona un menu a tendina rispetto al pulsante che lo apre.
      Serve perché il menu è "fixed": così nessun contenitore che scorre
      può ritagliarlo, ma le coordinate vanno calcolate a mano. */
@@ -2121,11 +2130,27 @@ if (isAppPage) {
     menu.style.top = `${top}px`;
   }
 
-  // scorrendo, un menu fisso resterebbe appeso lontano dal suo pulsante
+  // Scorrendo, un menu in posizione fissa resterebbe appeso lontano dal suo
+  // pulsante, quindi va riposizionato. Chiuderlo e basta non funziona:
+  // toccare un pulsante dentro la lista la fa scorrere per portarlo in
+  // vista, e il menu si richiudeva all'istante senza fare in tempo a
+  // vedersi. Si chiude solo se il pulsante esce davvero dallo schermo.
   window.addEventListener(
     "scroll",
     () => {
-      document.querySelectorAll(".track-menu.open").forEach((m) => m.classList.remove("open"));
+      if (!openFloatingMenu) return;
+      const { menu, anchor } = openFloatingMenu;
+      if (!menu.classList.contains("open")) {
+        openFloatingMenu = null;
+        return;
+      }
+      const rect = anchor.getBoundingClientRect();
+      if (rect.bottom < 0 || rect.top > window.innerHeight) {
+        menu.classList.remove("open");
+        openFloatingMenu = null;
+        return;
+      }
+      positionFloatingMenu(menu, anchor);
     },
     true
   );
