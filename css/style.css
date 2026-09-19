@@ -2513,12 +2513,11 @@ body.has-mini-player .bulk-bar {
   min-width: 0;
 }
 
+/* il ritaglio e i puntini di sospensione arrivano da .marquee/.marquee-text:
+   qui resta solo l'aspetto del testo */
 .track-title {
   font-size: 0.9rem;
   font-weight: 600;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 /* riga dei tag: ora è una riga propria sotto al titolo, mostrata solo

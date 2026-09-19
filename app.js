@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.14.0";
+const APP_VERSION = "1.14.1";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -1848,9 +1848,11 @@ if (isAppPage) {
     const info = document.createElement("div");
     info.className = "track-info";
     const title = document.createElement("span");
-    title.className = "track-title";
-    title.textContent = track.title;
+    title.className = "track-title marquee";
     info.appendChild(title);
+    // i titoli lunghi qui venivano tagliati dai puntini: se non ci stanno
+    // scorrono avanti e indietro (la misura arriva dopo, a riga inserita)
+    setMarqueeText(title, track.title);
 
     const subtitle = document.createElement("span");
     subtitle.className = "track-subtitle";
@@ -2099,7 +2101,7 @@ if (isAppPage) {
       track.tags = newTags;
       track.updated_at = now;
 
-      title.textContent = newTitle;
+      setMarqueeText(title, newTitle);
       updateTrackSubtitle();
       renderTagChips(tagsBox, newTags);
       attribution.textContent = attributionText(track, "Caricato");
@@ -3500,21 +3502,51 @@ if (isAppPage) {
     }
     if (inner.textContent !== text) inner.textContent = text || "";
     container.classList.remove("is-scrolling");
-    requestAnimationFrame(() => measureMarquee(container));
+    queueMarqueeMeasure(container);
   }
 
-  function measureMarquee(container) {
-    const inner = container.querySelector(".marquee-text");
-    if (!inner) return;
-    container.classList.remove("is-scrolling");
-    // qualche pixel di tolleranza: con l'arrotondamento dei subpixel
-    // quasi ogni testo risulta largo una frazione più del contenitore
-    const overflow = inner.scrollWidth - container.clientWidth;
-    if (overflow <= 3) return;
-    const distance = overflow + 8;
-    container.style.setProperty("--marquee-distance", `-${distance}px`);
-    container.style.setProperty("--marquee-duration", `${Math.max(5, distance / 30 + 3).toFixed(1)}s`);
-    container.classList.add("is-scrolling");
+  /* Le misure di tutti i contenitori in attesa si fanno in un fotogramma
+     solo, e prima si legge tutto e poi si scrive tutto. Misurando e
+     scrivendo una riga per volta il browser sarebbe costretto a
+     ricalcolare il layout a ogni riga, e con una libreria di decine di
+     brani il ridisegno della lista diventerebbe visibilmente a scatti. */
+  let marqueePending = [];
+  let marqueeFrame = null;
+
+  function queueMarqueeMeasure(container) {
+    if (!marqueePending.includes(container)) marqueePending.push(container);
+    if (marqueeFrame) return;
+    marqueeFrame = requestAnimationFrame(flushMarqueeMeasures);
+  }
+
+  function flushMarqueeMeasures() {
+    marqueeFrame = null;
+    const batch = marqueePending;
+    marqueePending = [];
+
+    // fase di lettura
+    const measures = [];
+    batch.forEach((container) => {
+      const inner = container.querySelector(".marquee-text");
+      // un contenitore staccato dalla pagina misura zero: la lista è stata
+      // ridisegnata mentre la misura era in coda
+      if (!inner || !container.isConnected) return;
+      measures.push({ container, overflow: inner.scrollWidth - container.clientWidth });
+    });
+
+    // fase di scrittura
+    measures.forEach(({ container, overflow }) => {
+      // qualche pixel di tolleranza: con l'arrotondamento dei subpixel
+      // quasi ogni testo risulta largo una frazione più del contenitore
+      if (overflow <= 3) {
+        container.classList.remove("is-scrolling");
+        return;
+      }
+      const distance = overflow + 8;
+      container.style.setProperty("--marquee-distance", `-${distance}px`);
+      container.style.setProperty("--marquee-duration", `${Math.max(5, distance / 30 + 3).toFixed(1)}s`);
+      container.classList.add("is-scrolling");
+    });
   }
 
   // ruotando lo schermo o aprendo la tastiera cambia la larghezza
@@ -3523,7 +3555,7 @@ if (isAppPage) {
   window.addEventListener("resize", () => {
     clearTimeout(marqueeResizeTimer);
     marqueeResizeTimer = setTimeout(() => {
-      document.querySelectorAll(".marquee").forEach(measureMarquee);
+      document.querySelectorAll(".marquee").forEach(queueMarqueeMeasure);
     }, 200);
   });
 
