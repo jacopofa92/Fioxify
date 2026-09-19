@@ -7,7 +7,7 @@ const SUPABASE_ANON_KEY =
 
 const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BUCKET_NAME = "Fioxisongs";
-const APP_VERSION = "1.13.5";
+const APP_VERSION = "1.14.0";
 
 const appVersionEl = document.getElementById("app-version");
 if (appVersionEl) appVersionEl.textContent = `v${APP_VERSION}`;
@@ -959,6 +959,9 @@ if (isAppPage) {
       // i giorni a zero restano come trattino sulla base: si vede che il
       // giorno esiste ma non ci sono ascolti, invece di sparire
       bar.style.height = d.plays ? `${Math.max((d.plays / maxPlays) * 100, 8)}%` : "2px";
+      // qui la cascata copre tutti i giorni: sono barre strette e
+      // affiancate, e l'effetto è proprio il riempirsi da sinistra
+      bar.style.setProperty("--row-index", String(i));
       bar.title = `${formatDayLabel(d.day)}: ${d.plays} ${d.plays === 1 ? "ascolto" : "ascolti"}`;
       bars.appendChild(bar);
     });
@@ -1520,6 +1523,13 @@ if (isAppPage) {
     return sortTracks(base);
   }
 
+  /* Ritardo di ingresso di una riga, per la comparsa a cascata. Oltre la
+     decima si smette di ritardare: in fondo a una lista lunga nessuno
+     vedrebbe l'effetto, e nel frattempo la pagina sembrerebbe vuota. */
+  function setRowIndex(el, i) {
+    el.style.setProperty("--row-index", String(Math.min(i, 10)));
+  }
+
   function render() {
     // un menu aperto è agganciato al body: va chiuso prima di buttare via
     // la riga che lo conteneva, altrimenti resterebbe lì a mezz'aria
@@ -1572,12 +1582,14 @@ if (isAppPage) {
     }
     emptyMessage.style.display = "none";
 
-    list.forEach((track) => {
+    list.forEach((track, i) => {
       // dalla libreria si riproduce un brano solo: la coda resta vuota.
       // Passando qui l'intero elenco visibile, cliccare una canzone
       // riempiva la coda con tutta la libreria. Album, playlist e gruppi
       // per artista continuano invece a costruire una coda vera.
-      tracksList.appendChild(buildTrackItem(track, [track], { selectable: selectionMode }));
+      const li = buildTrackItem(track, [track], { selectable: selectionMode });
+      setRowIndex(li, i);
+      tracksList.appendChild(li);
     });
   }
 
@@ -1748,12 +1760,13 @@ if (isAppPage) {
     }
     emptyMessage.style.display = "none";
 
-    names.forEach((name) => {
+    names.forEach((name, rowIndex) => {
       const tracks = groups[name];
       const groupKey = `${field}:${name}`;
 
       const li = document.createElement("li");
       li.className = "playlist-item";
+      setRowIndex(li, rowIndex);
 
       const row = document.createElement("div");
       row.className = "playlist-item-row";
@@ -2138,17 +2151,21 @@ if (isAppPage) {
   function positionFloatingMenu(menu, anchorBtn) {
     const margin = 8;
     const anchor = anchorBtn.getBoundingClientRect();
-    const box = menu.getBoundingClientRect();
+    // offsetWidth/Height e non getBoundingClientRect: il menu entra con una
+    // breve animazione di scala, e il rettangolo misurato a metà
+    // animazione darebbe dimensioni più piccole del vero
+    const width = menu.offsetWidth;
+    const height = menu.offsetHeight;
 
     // allineato a destra del pulsante, ma senza uscire dallo schermo
-    let left = anchor.right - box.width;
-    left = Math.max(margin, Math.min(left, window.innerWidth - box.width - margin));
+    let left = anchor.right - width;
+    left = Math.max(margin, Math.min(left, window.innerWidth - width - margin));
 
     // sotto al pulsante se c'è spazio, altrimenti sopra
     let top = anchor.bottom + 6;
-    if (top + box.height > window.innerHeight - margin) {
-      const above = anchor.top - box.height - 6;
-      top = above >= margin ? above : Math.max(margin, window.innerHeight - box.height - margin);
+    if (top + height > window.innerHeight - margin) {
+      const above = anchor.top - height - 6;
+      top = above >= margin ? above : Math.max(margin, window.innerHeight - height - margin);
     }
 
     menu.style.left = `${left}px`;
@@ -2211,6 +2228,7 @@ if (isAppPage) {
         // stessa icona, cambia solo il riempimento (vedi .icon-btn.liked svg)
         btn.classList.toggle("liked", newVal);
         btn.title = newVal ? "Togli dai preferiti" : "Aggiungi ai preferiti";
+        if (newVal) popHeart(btn);
       });
     }
   }
@@ -2486,11 +2504,12 @@ if (isAppPage) {
     }
     playlistsEmptyMessage.style.display = "none";
 
-    visiblePlaylists.forEach((pl) => {
+    visiblePlaylists.forEach((pl, rowIndex) => {
       const canEdit = isOwner(pl);
 
       const li = document.createElement("li");
       li.className = "playlist-item";
+      setRowIndex(li, rowIndex);
 
       const row = document.createElement("div");
       row.className = "playlist-item-row";
@@ -2713,11 +2732,12 @@ if (isAppPage) {
     }
     albumsEmptyMessage.style.display = "none";
 
-    visibleAlbums.forEach((al) => {
+    visibleAlbums.forEach((al, rowIndex) => {
       const canEdit = isOwner(al);
 
       const li = document.createElement("li");
       li.className = "playlist-item";
+      setRowIndex(li, rowIndex);
 
       const row = document.createElement("div");
       row.className = "playlist-item-row";
@@ -3464,6 +3484,49 @@ if (isAppPage) {
     registerPlay(track);
   }
 
+  /* Scrive un testo dentro un contenitore "marquee" e lo fa scorrere solo
+     se non ci sta davvero. La misura va presa a testo già impaginato,
+     quindi dopo un fotogramma; la velocità è costante (~30 px al
+     secondo) così un titolo lungo il doppio ci mette il doppio invece di
+     sfrecciare. */
+  function setMarqueeText(container, text) {
+    if (!container) return;
+    let inner = container.querySelector(".marquee-text");
+    if (!inner) {
+      container.textContent = "";
+      inner = document.createElement("span");
+      inner.className = "marquee-text";
+      container.appendChild(inner);
+    }
+    if (inner.textContent !== text) inner.textContent = text || "";
+    container.classList.remove("is-scrolling");
+    requestAnimationFrame(() => measureMarquee(container));
+  }
+
+  function measureMarquee(container) {
+    const inner = container.querySelector(".marquee-text");
+    if (!inner) return;
+    container.classList.remove("is-scrolling");
+    // qualche pixel di tolleranza: con l'arrotondamento dei subpixel
+    // quasi ogni testo risulta largo una frazione più del contenitore
+    const overflow = inner.scrollWidth - container.clientWidth;
+    if (overflow <= 3) return;
+    const distance = overflow + 8;
+    container.style.setProperty("--marquee-distance", `-${distance}px`);
+    container.style.setProperty("--marquee-duration", `${Math.max(5, distance / 30 + 3).toFixed(1)}s`);
+    container.classList.add("is-scrolling");
+  }
+
+  // ruotando lo schermo o aprendo la tastiera cambia la larghezza
+  // disponibile: un testo che prima sbordava può non sbordare più
+  let marqueeResizeTimer = null;
+  window.addEventListener("resize", () => {
+    clearTimeout(marqueeResizeTimer);
+    marqueeResizeTimer = setTimeout(() => {
+      document.querySelectorAll(".marquee").forEach(measureMarquee);
+    }, 200);
+  });
+
   // stato/UI del "brano in riproduzione": estratto da play() così il
   // crossfade può aggiornarlo al termine della dissolvenza senza dover
   // rifare fetch/decodifica di un audio già in riproduzione sul layer
@@ -3486,8 +3549,8 @@ if (isAppPage) {
     publishMediaMetadata(track);
     renderPlayerQueue();
 
-    miniTrackName.textContent = track.title;
-    miniTrackArtist.textContent = metaLine;
+    setMarqueeText(miniTrackName, track.title);
+    setMarqueeText(miniTrackArtist, metaLine);
     miniCover.src = track.cover || DEFAULT_COVER;
     miniPlayer.hidden = false;
     document.body.classList.add("has-mini-player");
@@ -3652,11 +3715,25 @@ if (isAppPage) {
 
   function updateLikeCurrentBtn(track) {
     const liked = favoriteTrackIds.has(track.id);
+    const wasLiked = likeCurrentBtn.classList.contains("liked");
     likeCurrentBtn.classList.toggle("liked", liked);
     // stesso tracciato, cambia solo il riempimento: il cuore "si riempie"
     // invece di sostituirsi con un'emoji diversa
     likeCurrentBtn.innerHTML = ICONS.heart;
     likeCurrentBtn.title = liked ? "Togli dai preferiti" : "Aggiungi ai preferiti";
+    if (liked && !wasLiked) popHeart(likeCurrentBtn);
+  }
+
+  /* Il cuore pulsa solo quando il preferito viene messo in quel momento.
+     Legarlo alla sola classe "liked" farebbe ripartire l'animazione su
+     tutti i cuori a ogni ridisegno della lista. */
+  function popHeart(btn) {
+    btn.classList.remove("just-liked");
+    // forza il ricalcolo, altrimenti togliere e rimettere la classe nello
+    // stesso fotogramma non fa ripartire l'animazione
+    void btn.offsetWidth;
+    btn.classList.add("just-liked");
+    setTimeout(() => btn.classList.remove("just-liked"), 450);
   }
 
   /* ORDINE CASUALE

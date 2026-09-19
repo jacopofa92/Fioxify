@@ -912,17 +912,58 @@ body.has-mini-player .app-main {
 .mini-player-title {
   font-size: 0.85rem;
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .mini-player-artist {
   font-size: 0.72rem;
   color: var(--text-secondary);
+}
+
+/* --------------------------------------------------
+   TESTO SCORREVOLE
+   Quando un titolo non ci sta, invece di tagliarlo con i puntini
+   lo si fa scorrere avanti e indietro. Il contenitore ritaglia, e a
+   muoversi è il testo dentro: spostare il contenitore sposterebbe
+   anche il ritaglio. La classe "is-scrolling" la mette app.js solo
+   dopo aver misurato che il testo sborda davvero.
+-------------------------------------------------- */
+.marquee {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.marquee-text {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+}
+
+.marquee.is-scrolling .marquee-text {
+  overflow: visible;
+  width: max-content;
+  /* le soste alle due estremità sono nei fotogrammi chiave: senza,
+     il testo torna indietro appena si finisce di leggerlo */
+  animation: marquee-slide var(--marquee-duration, 10s) ease-in-out infinite alternate;
+}
+
+@keyframes marquee-slide {
+  0%,
+  18% {
+    transform: translateX(0);
+  }
+  82%,
+  100% {
+    transform: translateX(var(--marquee-distance, 0));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee.is-scrolling .marquee-text {
+    overflow: hidden;
+    width: auto;
+    animation: none;
+  }
 }
 
 .mini-play-btn {
@@ -2437,23 +2478,17 @@ body.has-mini-player .bulk-bar {
   background: var(--bg-surface-2);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease, transform 0.08s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
+/* Il passaggio del mouse cambia solo sfondo e bordo. Il sollevamento di
+   un pixel che c'era prima costava caro: una transform rende la riga il
+   riferimento per gli elementi in posizione fissa che contiene, e
+   mandava fuori dallo schermo il menu ⋯; sul touch, per giunta, lo stato
+   hover resta attaccato all'ultima riga toccata. */
 .track-item:hover {
   background: var(--bg-surface-3);
   border-color: var(--border-strong);
-  transform: translateY(-1px);
-}
-
-/* Sul touch non esiste un vero "passaggio del mouse": lo stato hover
-   resta attaccato all'ultimo elemento toccato. Oltre a essere brutto, la
-   transform crea un nuovo riferimento per gli elementi in posizione
-   fissa contenuti nella riga, e mandava fuori posto il menu ⋯. */
-@media (hover: none) {
-  .track-item:hover {
-    transform: none;
-  }
 }
 
 .track-main-row {
@@ -2800,4 +2835,168 @@ body.has-mini-player .bulk-bar {
 .modal-btn-danger:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* --------------------------------------------------
+   ANIMAZIONI DI CONTORNO
+   Piccoli movimenti di ingresso e di risposta al tocco. Restano
+   volutamente brevi (0.2–0.4s): su una lista lunga un'animazione
+   generosa diventa un'attesa. In fondo al blocco vengono tutte
+   disattivate per chi ha chiesto meno movimento nelle impostazioni
+   di sistema.
+-------------------------------------------------- */
+
+/* cambio pagina dalla barra in basso */
+.app-page.active {
+  animation: page-in 0.28s ease both;
+}
+
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* comparsa a cascata delle righe: --row-index lo assegna app.js, ed è
+   limitato in modo che la decima riga non parta un secondo dopo la prima */
+.track-item,
+.playlist-item {
+  animation: row-in 0.3s ease both;
+  animation-delay: calc(var(--row-index, 0) * 0.035s);
+}
+
+@keyframes row-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* il mini player entra da sotto invece di apparire di colpo */
+.mini-player:not([hidden]) {
+  animation: mini-player-in 0.3s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+@keyframes mini-player-in {
+  from {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* il cuore "sboccia" quando si mette il preferito */
+.just-liked svg {
+  animation: heart-pop 0.4s cubic-bezier(0.2, 1.4, 0.4, 1);
+}
+
+@keyframes heart-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.35);
+  }
+  60% {
+    transform: scale(0.92);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Risposta al tocco: il pulsante cede leggermente sotto il dito. Solo i
+   comandi del player: il ⋯ delle righe è l'ancora a cui si aggancia il
+   menu, e misurarne la posizione mentre si sta rimpicciolendo lo
+   sposterebbe di qualche pixel. */
+.control-btn:active,
+.mini-play-btn:active,
+.cover-like-btn:active {
+  transform: scale(0.88);
+}
+
+.control-btn,
+.mini-play-btn {
+  transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.3, 1), background 0.15s ease, color 0.15s ease;
+}
+
+/* la scheda appena aperta di album/playlist scende invece di scattare */
+.playlist-tracks {
+  animation: expand-in 0.25s ease both;
+}
+
+@keyframes expand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* le voci del menu ⋯ arrivano una dopo l'altra */
+.add-to-playlist-menu.open {
+  animation: menu-in 0.16s ease both;
+}
+
+@keyframes menu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* le barre delle statistiche crescono da terra */
+.stat-bar {
+  animation: bar-grow 0.5s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+  animation-delay: calc(var(--row-index, 0) * 0.04s);
+  transform-origin: bottom center;
+}
+
+@keyframes bar-grow {
+  from {
+    transform: scaleY(0);
+    opacity: 0.3;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-page.active,
+  .track-item,
+  .playlist-item,
+  .mini-player:not([hidden]),
+  .just-liked svg,
+  .playlist-tracks,
+  .add-to-playlist-menu.open,
+  .stat-bar {
+    animation: none;
+  }
+
+  .control-btn:active,
+  .mini-play-btn:active,
+  .cover-like-btn:active {
+    transform: none;
+  }
 }
