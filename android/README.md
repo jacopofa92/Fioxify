@@ -72,6 +72,29 @@ Nel progetto Android le icone sono state rigenerate dalla stessa immagine
 e il colore `ic_launcher_background` è stato portato da `#FFFFFF` a `#0A0C10`.
 `npx cap sync` non le tocca, ma un `npx cap add android` rifatto da zero sì.
 
+## Stiramento elastico a fondo corsa
+
+Da Android 12 l'effetto di fine scorrimento non è più un bagliore ai bordi ma uno
+**stiramento** di tutto il contenuto, e lo disegna la WebView stessa come
+qualunque altra vista Android.
+
+Il CSS non basta. `overscroll-behavior: none` vale per gli elementi *dentro* la
+pagina (nel sito è impostato su `html`, `body` e su ogni lista con scorrimento
+proprio), ma non ha voce in capitolo sulla vista nativa che li contiene. Attenzione
+anche alla differenza fra i due valori: `contain` impedisce soltanto allo
+scorrimento di propagarsi al contenitore sotto, mentre lo stiramento locale resta —
+per toglierlo serve `none`.
+
+Per la vista nativa la riga sta in `MainActivity.java`:
+
+```java
+getBridge().getWebView().setOverScrollMode(View.OVER_SCROLL_NEVER);
+```
+
+È l'unica modifica nativa che il progetto aggiunge oltre a quelle di Capacitor,
+quindi va rimessa se `MainActivity` viene rigenerata da zero. Richiede una
+ricompilazione dell'APK: non arriva con il push del sito.
+
 ## Controlli media (autoradio Bluetooth, cuffie, schermata di blocco)
 
 Una WebView, a differenza di Chrome, non pubblica da sé una **MediaSession** al
