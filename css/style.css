@@ -67,13 +67,18 @@ body {
   overflow-x: hidden;
 }
 
-/* i contenitori con scroll proprio non devono propagare lo scroll (e il
-   rimbalzo) alla pagina quando arrivano a fondo corsa */
+/* Anche i contenitori con scroll proprio non devono stirarsi a fondo
+   corsa. Serve "none" e non "contain": contain impedisce soltanto che lo
+   scroll si propaghi al contenitore sotto, ma lo stiramento elastico sul
+   contenitore stesso resta. Era il motivo per cui la lista dei brani
+   continuava a "tirare" arrivata in fondo. */
 .tracks-list,
 .app-main,
 .full-player-overlay,
-.playlists-list {
-  overscroll-behavior: contain;
+.playlists-list,
+.add-to-playlist-menu,
+.player-queue-list {
+  overscroll-behavior: none;
 }
 
 /* la "chrome" dell'interfaccia non è testo da selezionare: evita sia la
@@ -1390,7 +1395,6 @@ body.audio-playing .track-item.playing .track-cover-small {
      all'infinito il player */
   max-height: 232px;
   overflow-y: auto;
-  overscroll-behavior: contain;
   padding-right: 4px;
 }
 
@@ -1784,7 +1788,6 @@ body.audio-playing .track-item.playing .track-cover-small {
   margin-bottom: 6px;
   max-height: min(300px, 50vh);
   overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 body.has-mini-player .bulk-bar {
@@ -2311,7 +2314,6 @@ body.has-mini-player .bulk-bar {
   min-width: 200px;
   max-height: min(320px, 60vh);
   overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .track-menu-separator {
